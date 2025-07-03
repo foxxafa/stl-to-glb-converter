@@ -232,6 +232,7 @@
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.sortObjects = true; // Enable object sorting for transparency
             sceneContainer.appendChild(renderer.domElement);
 
             controls = new OrbitControls(camera, renderer.domElement);
@@ -304,6 +305,8 @@
                 roughness: 0.5,
                 transparent: true, // Enable transparency for opacity control
                 opacity: 1,
+                alphaTest: 0.001, // Helps with transparency sorting
+                depthWrite: true, // Enable depth writing
             });
             const mesh = new THREE.Mesh(geometry, material);
             scene.add(mesh);
@@ -389,6 +392,21 @@
                 const newOpacity = parseFloat(target.value);
                 model.opacity = newOpacity;
                 model.mesh.material.opacity = newOpacity;
+                
+                // Handle transparency depth issues
+                if (newOpacity === 0) {
+                    // When fully transparent, disable depth writing to allow objects behind to show
+                    model.mesh.material.depthWrite = false;
+                    model.mesh.renderOrder = 1000; // Render last
+                } else if (newOpacity < 0.99) {
+                    // When partially transparent, enable depth writing but set render order
+                    model.mesh.material.depthWrite = false;
+                    model.mesh.renderOrder = 100;
+                } else {
+                    // When opaque, normal rendering
+                    model.mesh.material.depthWrite = true;
+                    model.mesh.renderOrder = 0;
+                }
                 
                 // Update opacity value display
                 const opacityValueDisplay = document.querySelector(`.opacity-value[data-uuid="${uuid}"]`);
