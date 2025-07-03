@@ -388,7 +388,7 @@
         }
 
         // --- UI Management ---
-        function updateModelList() {
+        function updateModelList(isInitialCall = false) {
             modelListContainer.innerHTML = '';
             if (models.length === 0) {
                 modelListContainer.appendChild(noModelsMessage);
@@ -427,7 +427,9 @@
                 });
             }
             updateExportButtonState();
-            saveCurrentState();
+            if (!isInitialCall) {
+                saveCurrentState();
+            }
         }
 
         function handleListInteraction(e) {
@@ -705,7 +707,9 @@
         // Listen for the state to load from the main process
         window.electronAPI.onLoadState((state) => {
             console.log('[Renderer] Received state from main process to load:', state);
-            loadState(state);
+            loadState(state).then(() => {
+                stateReady = true;
+            });
         });
 
         // Listen for main process asking if we want to load a previous state
@@ -740,11 +744,15 @@
                 if (!modelState.filePath) continue;
 
                 try {
+                    console.log(`[Renderer] Loading model from path: ${modelState.filePath}`);
                     const contents = await window.electronAPI.readFile(modelState.filePath);
                     if (contents) {
                         const loader = new STLLoader();
                         const geometry = loader.parse(contents);
                         addModelToScene(geometry, modelState.name, modelState);
+                    } else {
+                        console.error(`[Renderer] Failed to read file content for ${modelState.name} at ${modelState.filePath}. Contents are null.`);
+                        showError(`${modelState.name} dosyası okunamadı. Dosya silinmiş veya yeri değişmiş olabilir.`);
                     }
                 } catch (error) {
                     showError(`${modelState.name} yüklenemedi: ${error.message}`);
@@ -769,7 +777,7 @@
 
         // --- Initial Call ---
         init3D();
-        updateModelList();
+        updateModelList(true); // Pass a flag to indicate this is the initial call
     </script>
 </body>
 </html>
