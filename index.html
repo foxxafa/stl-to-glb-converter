@@ -308,7 +308,7 @@
                 color: new THREE.Color(defaultColor),
                 metalness: 0.1,
                 roughness: 0.5,
-                transparent: true,
+                transparent: false, // Opaque by default
                 opacity: 1,
                 side: THREE.DoubleSide,
             });
@@ -397,6 +397,15 @@
                 const newOpacity = parseFloat(target.value);
                 model.opacity = newOpacity;
                 model.mesh.material.opacity = newOpacity;
+
+                // Dynamically change rendering properties based on opacity
+                if (newOpacity < 1.0) {
+                    model.mesh.material.transparent = true;
+                    model.mesh.material.depthWrite = false;
+                } else {
+                    model.mesh.material.transparent = false;
+                    model.mesh.material.depthWrite = true;
+                }
                 
                 // If the main visibility toggle is on, adjust visibility based on opacity
                 if(model.visible) {
