@@ -341,19 +341,8 @@
                             const loader = new STLLoader();
                             const geometry = loader.parse(contents);
                             
-                            // If we don't have a cached path, store the file data directly
-                            let fileOptions = { filePath: finalPath };
-                            if (!finalPath) {
-                                console.log(`[Renderer] No file path available, storing file data directly for ${file.name}`);
-                                // Convert ArrayBuffer to base64 for storage
-                                const uint8Array = new Uint8Array(contents);
-                                let binary = '';
-                                uint8Array.forEach(byte => binary += String.fromCharCode(byte));
-                                fileOptions.fileData = btoa(binary);
-                            }
-                            
-                            console.log(`[Renderer] STL parsed successfully for ${file.name}, adding to scene with options:`, fileOptions);
-                            addModelToScene(geometry, file.name, fileOptions);
+                            console.log(`[Renderer] STL parsed successfully for ${file.name}, adding to scene with path: ${finalPath}`);
+                            addModelToScene(geometry, file.name, { filePath: finalPath });
                             resolve();
                         } catch (e) { reject(`${file.name} işlenemedi.`); }
                     };
@@ -372,7 +361,7 @@
         }
 
         function addModelToScene(geometry, name, options = {}) {
-            const { filePath, fileData, color, opacity, visible } = options;
+            const { filePath, color, opacity, visible } = options;
             
             geometry.center();
             const defaultColor = '#E0E0E0';
@@ -398,7 +387,6 @@
                 name, 
                 mesh, 
                 filePath,
-                fileData, // Store raw file data as fallback
                 color: color || defaultColor, 
                 visible: mesh.visible, 
                 opacity: opacity !== undefined ? opacity : 1
@@ -747,7 +735,6 @@
           return models.map(model => ({
             name: model.name,
             filePath: model.filePath,
-            fileData: model.fileData, // Include file data for fallback
             color: model.color,
             opacity: model.opacity,
             visible: model.visible,
@@ -761,48 +748,29 @@
             loadingIndicator.classList.remove('hidden');
 
             for (const modelState of state) {
-                console.log(`[Renderer] Processing model from state. Name: ${modelState.name}, FilePath: ${modelState.filePath}, HasFileData: ${!!modelState.fileData}`);
+                console.log(`[Renderer] Processing model from state. Name: ${modelState.name}, FilePath: ${modelState.filePath}`);
                 
-                // Skip if we have neither file path nor file data
-                if (!modelState.filePath && !modelState.fileData) {
-                    console.error(`[Renderer] SKIPPING model ${modelState.name} because both filePath and fileData are missing.`);
+                if (!modelState.filePath) {
+                    console.error(`[Renderer] SKIPPING model ${modelState.name} because filePath is missing.`);
                     continue;
                 }
 
                 try {
-                    let contents = null;
-                    
-                    // Try to load from file path first
-                    if (modelState.filePath && window.electronAPI) {
-                        console.log(`[Renderer] Loading model from file path: ${modelState.filePath}`);
-                        contents = await window.electronAPI.readFile(modelState.filePath);
-                    }
-                    
-                    // If file path failed or not available, use stored file data
-                    if (!contents && modelState.fileData) {
-                        console.log(`[Renderer] Loading model from stored file data for ${modelState.name}`);
-                        const binaryString = atob(modelState.fileData);
-                        const bytes = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            bytes[i] = binaryString.charCodeAt(i);
-                        }
-                        contents = bytes.buffer;
-                    }
-                    
+                    console.log(`[Renderer] Loading model from file path: ${modelState.filePath}`);
+                    const contents = await window.electronAPI.readFile(modelState.filePath);
                     if (contents) {
                         const loader = new STLLoader();
                         const geometry = loader.parse(contents);
                         addModelToScene(geometry, modelState.name, modelState);
                     } else {
-                        console.error(`[Renderer] Failed to load model ${modelState.name} - no valid data source found.`);
-                        showError(`${modelState.name} dosyası yüklenemedi.`);
+                        console.error(`[Renderer] Failed to load model ${modelState.name} - file not found.`);
+                        showError(`${modelState.name} dosyası bulunamadı.`);
                     }
                 } catch (error) {
                     console.error(`[Renderer] Error loading model ${modelState.name}:`, error);
                     showError(`${modelState.name} yüklenemedi: ${error.message}`);
                 }
             }
-            // Pass true to prevent an immediate re-save of the just-loaded state.
             updateModelList(true); 
             loadingIndicator.classList.add('hidden');
         }
