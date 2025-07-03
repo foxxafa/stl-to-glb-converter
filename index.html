@@ -317,11 +317,16 @@
                     return Promise.resolve(); // Ignore non-stl files
                 }
 
+                console.log(`[Renderer] Processing file: ${file.name}`);
                 // In Electron, get a permanent path by caching the file.
                 // In the browser, file.path is undefined, so we'll just read the blob.
                 let finalPath = file.path; 
+                console.log(`[Renderer] Original file path: ${finalPath}`);
+                
                 if (window.electronAPI && finalPath) {
+                    console.log(`[Renderer] Requesting cache for file: ${finalPath}`);
                     finalPath = await window.electronAPI.cacheFile(finalPath);
+                    console.log(`[Renderer] Cached file path received: ${finalPath}`);
                     if (!finalPath) {
                         showError(`${file.name} dosyası kopyalanamadı ve sahneye eklenemedi.`);
                         return Promise.resolve();
@@ -332,9 +337,11 @@
                     const reader = new FileReader();
                     reader.onload = (event) => {
                         try {
+                            console.log(`[Renderer] FileReader loaded ${file.name}, parsing STL...`);
                             const contents = event.target.result;
                             const loader = new STLLoader();
                             const geometry = loader.parse(contents);
+                            console.log(`[Renderer] STL parsed successfully for ${file.name}, adding to scene with path: ${finalPath}`);
                             // Pass the permanent cached path.
                             addModelToScene(geometry, file.name, { filePath: finalPath });
                             resolve();
@@ -348,8 +355,9 @@
             Promise.all(filePromises)
                 .catch(err => showError(err))
                 .finally(() => {
+                    // Files have been added, this is not an initial call, so save state.
+                    updateModelList(false); 
                     loadingIndicator.classList.add('hidden');
-                    updateModelList();
                 });
         }
 
@@ -741,7 +749,11 @@
             loadingIndicator.classList.remove('hidden');
 
             for (const modelState of state) {
-                if (!modelState.filePath) continue;
+                console.log(`[Renderer] Processing model from state. Name: ${modelState.name}, FilePath: ${modelState.filePath}`);
+                if (!modelState.filePath) {
+                    console.error(`[Renderer] SKIPPING model ${modelState.name} because filePath is missing or invalid.`);
+                    continue;
+                }
 
                 try {
                     console.log(`[Renderer] Loading model from path: ${modelState.filePath}`);
@@ -758,7 +770,8 @@
                     showError(`${modelState.name} yüklenemedi: ${error.message}`);
                 }
             }
-            updateModelList();
+            // Pass true to prevent an immediate re-save of the just-loaded state.
+            updateModelList(true); 
             loadingIndicator.classList.add('hidden');
         }
 
@@ -771,7 +784,7 @@
 
             console.log('[Renderer] A change was detected, preparing to save state...');
             const state = getCurrentState();
-            console.log('[Renderer] Current state:', state);
+            console.log('[Renderer] Sending state to save:', JSON.stringify(state, null, 2));
             window.electronAPI.saveState(state);
         }
 

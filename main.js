@@ -18,6 +18,7 @@ if (!fs.existsSync(cacheFolderPath)) {
 function saveState(state) {
   try {
     console.log('[Main Process] Saving state to file...');
+    console.log('[Main Process] State content being saved:', JSON.stringify(state, null, 2));
     fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
     console.log('[Main Process] State saved successfully.');
   } catch (error) {
@@ -31,7 +32,7 @@ function loadState() {
       console.log('[Main Process] Found state file. Reading...');
       const stateData = fs.readFileSync(stateFilePath, 'utf-8');
       const state = JSON.parse(stateData);
-      console.log('[Main Process] State loaded successfully.');
+      console.log('[Main Process] State loaded successfully. Content:', JSON.stringify(state, null, 2));
       return state;
     } else {
       console.log('[Main Process] No state file found.');
@@ -73,6 +74,9 @@ function createWindow () {
 
   win.loadFile('index.html');
 
+  // Automatically open DevTools for debugging has been removed for now.
+  // win.webContents.openDevTools();
+
   // Ask renderer to load state if it exists
   win.webContents.on('did-finish-load', () => {
     const state = loadState();
@@ -95,6 +99,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('cache-file', (event, sourcePath) => {
+      console.log(`[Main Process] cache-file request received for: ${sourcePath}`);
       if (!fs.existsSync(sourcePath)) {
           console.error(`[Main Process] cache-file: Source file does not exist at ${sourcePath}`);
           return null;
@@ -103,7 +108,7 @@ app.whenReady().then(() => {
           const uniqueId = `${Date.now()}-${path.basename(sourcePath)}`;
           const cachedPath = path.join(cacheFolderPath, uniqueId);
           fs.copyFileSync(sourcePath, cachedPath);
-          console.log(`[Main Process] Copied ${sourcePath} to ${cachedPath}`);
+          console.log(`[Main Process] Successfully copied ${sourcePath} to ${cachedPath}`);
           return cachedPath;
       } catch (error) {
           console.error(`[Main Process] Failed to cache file ${sourcePath}:`, error);
