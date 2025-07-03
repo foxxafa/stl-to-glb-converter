@@ -229,10 +229,15 @@
             camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
             camera.position.set(20, 20, 20);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                alpha: true,
+                premultipliedAlpha: false
+            });
             renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.sortObjects = true; // Enable object sorting for transparency
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
             sceneContainer.appendChild(renderer.domElement);
 
             controls = new OrbitControls(camera, renderer.domElement);
@@ -303,10 +308,9 @@
                 color: new THREE.Color(defaultColor),
                 metalness: 0.1,
                 roughness: 0.5,
-                transparent: true, // Enable transparency for opacity control
+                transparent: true,
                 opacity: 1,
-                alphaTest: 0.001, // Helps with transparency sorting
-                depthWrite: true, // Enable depth writing
+                side: THREE.DoubleSide,
             });
             const mesh = new THREE.Mesh(geometry, material);
             scene.add(mesh);
@@ -382,7 +386,8 @@
 
             if (target.matches('.visibility-toggle')) {
                 model.visible = target.checked;
-                model.mesh.visible = model.visible;
+                // Also respect the opacity value. If opacity is zero, it should remain invisible.
+                model.mesh.visible = model.visible && model.opacity > 0;
                 updateExportButtonState();
                 updateSceneBounds();
             } else if (target.matches('.color-picker')) {
@@ -393,21 +398,11 @@
                 model.opacity = newOpacity;
                 model.mesh.material.opacity = newOpacity;
                 
-                // Handle transparency depth issues
-                if (newOpacity === 0) {
-                    // When fully transparent, disable depth writing to allow objects behind to show
-                    model.mesh.material.depthWrite = false;
-                    model.mesh.renderOrder = 1000; // Render last
-                } else if (newOpacity < 0.99) {
-                    // When partially transparent, enable depth writing but set render order
-                    model.mesh.material.depthWrite = false;
-                    model.mesh.renderOrder = 100;
-                } else {
-                    // When opaque, normal rendering
-                    model.mesh.material.depthWrite = true;
-                    model.mesh.renderOrder = 0;
+                // If the main visibility toggle is on, adjust visibility based on opacity
+                if(model.visible) {
+                    model.mesh.visible = newOpacity > 0;
                 }
-                
+
                 // Update opacity value display
                 const opacityValueDisplay = document.querySelector(`.opacity-value[data-uuid="${uuid}"]`);
                 if (opacityValueDisplay) {
