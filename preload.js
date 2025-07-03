@@ -18,7 +18,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Renderer to Main (Invoke for response)
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
-  cacheFile: (sourcePath) => ipcRenderer.invoke('cache-file', sourcePath)
+  cacheFile: (sourcePath) => ipcRenderer.invoke('cache-file', sourcePath),
+  cacheFileData: (fileName, arrayBuffer) => ipcRenderer.invoke('cache-file-data', fileName, arrayBuffer)
 });
 
 window.addEventListener('DOMContentLoaded', () => {

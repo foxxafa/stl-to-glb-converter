@@ -120,6 +120,24 @@ app.whenReady().then(() => {
       }
   });
 
+  ipcMain.handle('cache-file-data', (event, fileName, arrayBuffer) => {
+      console.log(`[Main Process] cache-file-data request received for: ${fileName}`);
+      try {
+          const uniqueId = `${Date.now()}-${fileName}`;
+          const cachedPath = path.join(cacheFolderPath, uniqueId);
+          
+          // Convert ArrayBuffer to Buffer and write to file
+          const buffer = Buffer.from(arrayBuffer);
+          fs.writeFileSync(cachedPath, buffer);
+          
+          console.log(`[Main Process] Successfully cached file data for ${fileName} to ${cachedPath}`);
+          return cachedPath;
+      } catch (error) {
+          console.error(`[Main Process] Failed to cache file data for ${fileName}:`, error);
+          return null;
+      }
+  });
+
   ipcMain.on('delete-cached-file', (event, filePath) => {
       if (filePath && fs.existsSync(filePath)) {
           try {

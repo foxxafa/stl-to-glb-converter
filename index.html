@@ -33,14 +33,6 @@
             height: 100vh;
             overflow-y: auto;
         }
-        .drop-zone {
-            border: 2px dashed #4a5568;
-            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-        }
-        .drop-zone.drag-over {
-            background-color: #2d3748;
-            border-color: #6366f1;
-        }
         input[type="color"] {
             -webkit-appearance: none;
             width: 28px;
@@ -166,16 +158,12 @@
                 </label>
             </div>
 
-            <!-- 2. Upload & Manage Section -->
+            <!-- 2. Model Management Section -->
             <div class="bg-gray-900 p-4 rounded-xl">
-                <h2 class="text-lg font-semibold mb-3">2. Modelleri Yükle ve Yönet</h2>
-                <div id="drop-zone" class="drop-zone rounded-lg p-6 text-center cursor-pointer">
-                    <svg class="mx-auto h-10 w-10 text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4V12a4 4 0 014-4h12l4 4h12a4 4 0 014 4v4m-8-8l-4-4m0 0L8 8m16 4v12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-                    <p class="mt-2 text-sm text-gray-400">STL dosyalarını sürükleyin veya tıklayın</p>
-                </div>
-                <input type="file" id="file-input" multiple accept=".stl" class="hidden">
+                <h2 class="text-lg font-semibold mb-3">2. Model Yönetimi</h2>
+                <p class="text-gray-400 text-sm mb-3">STL dosyalarını sahneye sürükleyin veya aşağıdan yönetin.</p>
                 
-                <div id="model-list" class="space-y-3 mt-4 max-h-80 overflow-y-auto pr-2">
+                <div id="model-list" class="space-y-3 max-h-80 overflow-y-auto pr-2">
                     <p id="no-models-message" class="text-gray-500 text-center py-4">Henüz model yüklenmedi.</p>
                 </div>
             </div>
@@ -231,8 +219,6 @@
 
         // --- DOM Element References ---
         const sceneContainer = document.getElementById('scene-container');
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
         const modelListContainer = document.getElementById('model-list');
         const noModelsMessage = document.getElementById('no-models-message');
         const exportBtn = document.getElementById('export-glb-btn');
@@ -282,11 +268,18 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
 
+            // Set up lighting for better visibility
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
             scene.add(ambientLight);
+            
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
             directionalLight.position.set(5, 10, 7.5);
             scene.add(directionalLight);
+            
+            // Add a second directional light from the opposite direction for better illumination
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+            directionalLight2.position.set(-5, -10, -7.5);
+            scene.add(directionalLight2);
             
             gridHelper = new THREE.GridHelper(currentGridSize, 10, 0x4b5563, 0x4b5563);
             scene.add(gridHelper);
@@ -318,41 +311,61 @@
                 }
 
                 console.log(`[Renderer] Processing file: ${file.name}`);
-                let finalPath = file.path; 
-                console.log(`[Renderer] Original file path: ${finalPath}`);
-                
-                // Try to cache the file if we have a path
-                if (window.electronAPI && finalPath) {
-                    console.log(`[Renderer] Requesting cache for file: ${finalPath}`);
-                    finalPath = await window.electronAPI.cacheFile(finalPath);
-                    console.log(`[Renderer] Cached file path received: ${finalPath}`);
-                    if (!finalPath) {
-                        showError(`${file.name} dosyası kopyalanamadı ve sahneye eklenemedi.`);
-                        return Promise.resolve();
-                    }
-                }
                 
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onload = (event) => {
+                    reader.onload = async (event) => {
                         try {
                             console.log(`[Renderer] FileReader loaded ${file.name}, parsing STL...`);
                             const contents = event.target.result;
                             const loader = new STLLoader();
                             const geometry = loader.parse(contents);
                             
-                            console.log(`[Renderer] STL parsed successfully for ${file.name}, adding to scene with path: ${finalPath}`);
-                            addModelToScene(geometry, file.name, { filePath: finalPath });
+                            // Log geometry bounds for debugging
+                            geometry.computeBoundingBox();
+                            const box = geometry.boundingBox;
+                            console.log(`[Renderer] ${file.name} bounds:`, {
+                                min: box.min,
+                                max: box.max,
+                                size: box.getSize(new THREE.Vector3()),
+                                center: box.getCenter(new THREE.Vector3())
+                            });
+                            
+                            // Cache the file data directly instead of relying on file.path
+                            let cachedPath = null;
+                            if (window.electronAPI) {
+                                console.log(`[Renderer] Caching file data for ${file.name}`);
+                                // Send the ArrayBuffer data to main process for caching
+                                cachedPath = await window.electronAPI.cacheFileData(file.name, contents);
+                                console.log(`[Renderer] Cached file path received: ${cachedPath}`);
+                                
+                                if (!cachedPath) {
+                                    console.error(`[Renderer] Failed to cache file ${file.name}`);
+                                    showError(`${file.name} dosyası kopyalanamadı. Uygulama yeniden başlatıldığında bu model kaybolacak.`);
+                                }
+                            }
+                            
+                            console.log(`[Renderer] STL parsed successfully for ${file.name}, adding to scene with path: ${cachedPath}`);
+                            addModelToScene(geometry, file.name, { filePath: cachedPath });
                             resolve();
-                        } catch (e) { reject(`${file.name} işlenemedi.`); }
+                        } catch (e) { 
+                            console.error(`[Renderer] Error parsing STL for ${file.name}:`, e);
+                            reject(`${file.name} işlenemedi: ${e.message}`); 
+                        }
                     };
-                    reader.onerror = () => reject(`${file.name} okunamadı.`);
+                    reader.onerror = () => {
+                        console.error(`[Renderer] FileReader error for ${file.name}`);
+                        reject(`${file.name} okunamadı.`);
+                    };
                     reader.readAsArrayBuffer(file);
                 });
             });
 
             Promise.all(filePromises)
-                .catch(err => showError(err))
+                .catch(err => {
+                    console.error('[Renderer] Error in handleFiles:', err);
+                    showError(err);
+                })
                 .finally(() => {
                     // Files have been added, this is not an initial call, so save state.
                     updateModelList(false); 
@@ -361,9 +374,11 @@
         }
 
         function addModelToScene(geometry, name, options = {}) {
-            const { filePath, color, opacity, visible } = options;
+            const { filePath, color, opacity, visible, position, rotation, scale } = options;
             
-            geometry.center();
+            // Don't center the geometry automatically - preserve original positions
+            // geometry.center(); // REMOVED - this was causing position issues
+            
             const defaultColor = '#E0E0E0';
             
             const material = new THREE.MeshStandardMaterial({
@@ -380,6 +395,17 @@
 
             const mesh = new THREE.Mesh(geometry, material);
             mesh.visible = visible !== undefined ? visible : true;
+
+            // Apply position, rotation, and scale if provided
+            if (position) {
+                mesh.position.set(position.x, position.y, position.z);
+            }
+            if (rotation) {
+                mesh.rotation.set(rotation.x, rotation.y, rotation.z);
+            }
+            if (scale) {
+                mesh.scale.set(scale.x, scale.y, scale.z);
+            }
 
             scene.add(mesh);
             models.push({ 
@@ -534,25 +560,36 @@
 
             const box = new THREE.Box3();
             visibleModels.forEach(modelData => {
-                box.expandByObject(modelData.mesh);
+                // Use the mesh's world bounding box instead of local geometry bounds
+                const meshBox = new THREE.Box3().setFromObject(modelData.mesh);
+                box.union(meshBox);
             });
 
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             
-            const maxSize = Math.max(size.x, size.z);
-            const fitSize = maxSize * 4.0; 
+            console.log(`[Renderer] Scene bounds:`, {
+                size: size,
+                center: center,
+                min: box.min,
+                max: box.max
+            });
+            
+            const maxSize = Math.max(size.x, size.y, size.z);
+            const fitSize = maxSize * 1.5; // Reduced for tighter fit
             const newGridSize = Math.max(DEFAULT_GRID_SIZE, Math.ceil(fitSize / 20) * 20);
 
-            if (Math.abs(newGridSize - currentGridSize) / currentGridSize < 0.50) {
-                controls.target.copy(center);
-                return; 
+            // Update grid position to match model center
+            if (gridHelper) {
+                scene.remove(gridHelper);
             }
             
             currentGridSize = newGridSize;
-            scene.remove(gridHelper);
             gridHelper = new THREE.GridHelper(currentGridSize, 20, 0x4b5563, 0x4b5563);
             gridHelper.visible = gridToggleCheckbox.checked;
+            
+            // Position grid at the center of the models
+            gridHelper.position.set(center.x, center.y, center.z);
             scene.add(gridHelper);
 
             scene.fog.near = currentGridSize * 0.5;
@@ -608,47 +645,29 @@
 
         // --- Event Listeners ---
         window.addEventListener('resize', onWindowResize);
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
         
-        // --- Drag and Drop Listeners for both Drop Zone and Scene Container ---
-        const dropTargets = [dropZone, sceneContainer];
-        
-        dropTargets.forEach(target => {
-            target.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                if (target === dropZone) {
-                    target.classList.add('drag-over');
-                } else {
-                    sceneDropOverlay.classList.remove('hidden');
-                }
-            });
+        // --- Drag and Drop Listeners for Scene Container Only ---
+        sceneContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            sceneDropOverlay.classList.remove('hidden');
+        });
 
-            target.addEventListener('dragenter', (e) => {
-                e.preventDefault(); // Needed for dragover to work
-            });
+        sceneContainer.addEventListener('dragenter', (e) => {
+            e.preventDefault(); // Needed for dragover to work
+        });
 
-            target.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                if (target === dropZone) {
-                    target.classList.remove('drag-over');
-                } else {
-                    // Check if the leave is going to a child element, if not, hide overlay
-                    if (!target.contains(e.relatedTarget)) {
-                        sceneDropOverlay.classList.add('hidden');
-                    }
-                }
-            });
+        sceneContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            // Check if the leave is going to a child element, if not, hide overlay
+            if (!sceneContainer.contains(e.relatedTarget)) {
+                sceneDropOverlay.classList.add('hidden');
+            }
+        });
 
-            target.addEventListener('drop', (e) => {
-                e.preventDefault();
-                if (target === dropZone) {
-                    target.classList.remove('drag-over');
-                } else {
-                    sceneDropOverlay.classList.add('hidden');
-                }
-                handleFiles(e.dataTransfer.files);
-            });
+        sceneContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            sceneDropOverlay.classList.add('hidden');
+            handleFiles(e.dataTransfer.files);
         });
 
         modelListContainer.addEventListener('input', handleListInteraction);
@@ -732,26 +751,57 @@
 
         // --- State Management ---
         function getCurrentState() {
-          return models.map(model => ({
-            name: model.name,
-            filePath: model.filePath,
-            color: model.color,
-            opacity: model.opacity,
-            visible: model.visible,
-          }));
+          return models.map(model => {
+            const state = {
+              name: model.name,
+              filePath: model.filePath,
+              color: model.color,
+              opacity: model.opacity,
+              visible: model.visible,
+              position: {
+                x: model.mesh.position.x,
+                y: model.mesh.position.y,
+                z: model.mesh.position.z
+              },
+              rotation: {
+                x: model.mesh.rotation.x,
+                y: model.mesh.rotation.y,
+                z: model.mesh.rotation.z
+              },
+              scale: {
+                x: model.mesh.scale.x,
+                y: model.mesh.scale.y,
+                z: model.mesh.scale.z
+              }
+            };
+            
+            // Debug logging for filePath issues
+            if (!state.filePath) {
+              console.warn(`[Renderer] WARNING: Model ${state.name} has no filePath - it won't be restorable on reload!`);
+            }
+            
+            return state;
+          });
         }
 
         async function loadState(state) {
             if (!state || !Array.isArray(state)) return;
 
+            console.log(`[Renderer] Loading state with ${state.length} models`);
             loadingText.textContent = "Kaydedilen sahne yükleniyor...";
             loadingIndicator.classList.remove('hidden');
 
+            let loadedCount = 0;
+            let failedCount = 0;
+            const failedModels = [];
+
             for (const modelState of state) {
-                console.log(`[Renderer] Processing model from state. Name: ${modelState.name}, FilePath: ${modelState.filePath}`);
+                console.log(`[Renderer] Processing model from state:`, modelState);
                 
                 if (!modelState.filePath) {
                     console.error(`[Renderer] SKIPPING model ${modelState.name} because filePath is missing.`);
+                    failedModels.push(modelState.name);
+                    failedCount++;
                     continue;
                 }
 
@@ -761,16 +811,43 @@
                     if (contents) {
                         const loader = new STLLoader();
                         const geometry = loader.parse(contents);
+                        
+                        // Log geometry bounds for debugging
+                        geometry.computeBoundingBox();
+                        const box = geometry.boundingBox;
+                        console.log(`[Renderer] Loaded ${modelState.name} bounds:`, {
+                            min: box.min,
+                            max: box.max,
+                            size: box.getSize(new THREE.Vector3()),
+                            center: box.getCenter(new THREE.Vector3())
+                        });
+                        
                         addModelToScene(geometry, modelState.name, modelState);
+                        loadedCount++;
+                        console.log(`[Renderer] Successfully loaded model: ${modelState.name}`);
                     } else {
-                        console.error(`[Renderer] Failed to load model ${modelState.name} - file not found.`);
-                        showError(`${modelState.name} dosyası bulunamadı.`);
+                        console.error(`[Renderer] Failed to load model ${modelState.name} - file not found at ${modelState.filePath}`);
+                        failedModels.push(modelState.name);
+                        failedCount++;
                     }
                 } catch (error) {
                     console.error(`[Renderer] Error loading model ${modelState.name}:`, error);
-                    showError(`${modelState.name} yüklenemedi: ${error.message}`);
+                    failedModels.push(modelState.name);
+                    failedCount++;
                 }
             }
+
+            console.log(`[Renderer] Load complete. Loaded: ${loadedCount}, Failed: ${failedCount}`);
+            
+            if (failedCount > 0) {
+                const errorMessage = `${failedCount} model yüklenemedi: ${failedModels.join(', ')}. Bu modeller sahneye eklenmedi.`;
+                showError(errorMessage);
+            }
+            
+            if (loadedCount > 0) {
+                console.log(`[Renderer] Successfully loaded ${loadedCount} models from saved state`);
+            }
+            
             updateModelList(true); 
             loadingIndicator.classList.add('hidden');
         }
@@ -794,3 +871,5 @@
     </script>
 </body>
 </html>
+
+
