@@ -145,6 +145,9 @@
                 <p id="loading-text" class="mt-4 text-lg">Model yükleniyor...</p>
             </div>
         </div>
+        <div id="scene-drop-overlay" class="absolute inset-0 bg-gray-900 bg-opacity-50 border-4 border-dashed border-indigo-500 rounded-xl hidden items-center justify-center z-10 pointer-events-none">
+            <p class="text-2xl font-bold text-white">STL dosyalarını buraya bırakın</p>
+        </div>
     </div>
 
     <!-- CONTROLS PANEL (SIDEBAR) -->
@@ -193,6 +196,21 @@
         </div>
     </aside>
 
+    <!-- Export Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4">
+            <h2 class="text-xl font-bold">GLB Olarak Dışa Aktar</h2>
+            <p class="text-gray-400">Dışa aktarılacak modelleri seçin.</p>
+            <div id="export-model-list" class="space-y-2 max-h-60 overflow-y-auto border border-gray-700 p-3 rounded-lg">
+                <!-- Model items will be injected here -->
+            </div>
+            <div class="flex justify-end gap-4 pt-4">
+                <button id="cancel-export-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors">İptal</button>
+                <button id="confirm-export-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-bold transition-colors">Seçilenleri Dışa Aktar</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -211,6 +229,11 @@
         const errorMessageDiv = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
         const gridToggleCheckbox = document.getElementById('grid-toggle-checkbox');
+        const sceneDropOverlay = document.getElementById('scene-drop-overlay');
+        const exportModal = document.getElementById('export-modal');
+        const exportModelList = document.getElementById('export-model-list');
+        const cancelExportBtn = document.getElementById('cancel-export-btn');
+        const confirmExportBtn = document.getElementById('confirm-export-btn');
 
         // --- Global State ---
         let models = [];
@@ -273,23 +296,28 @@
             loadingIndicator.classList.remove('hidden');
 
             const filePromises = Array.from(files).map(file => {
+                // In Electron, dropped files have a 'path' property. In the browser, this will be undefined.
+                const filePath = file.path; 
+                
+                // We only care about the file extension now.
+                if (!file.name.toLowerCase().endsWith('.stl')) {
+                    return Promise.resolve(); // Ignore non-stl files
+                }
+
                 return new Promise((resolve, reject) => {
-                    if (file.name.toLowerCase().endsWith('.stl')) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                            try {
-                                const contents = event.target.result;
-                                const loader = new STLLoader();
-                                const geometry = loader.parse(contents);
-                                addModelToScene(geometry, file.name);
-                                resolve();
-                            } catch (e) { reject(`${file.name} işlenemedi.`); }
-                        };
-                        reader.onerror = () => reject(`${file.name} okunamadı.`);
-                        reader.readAsArrayBuffer(file);
-                    } else {
-                        resolve();
-                    }
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const contents = event.target.result;
+                            const loader = new STLLoader();
+                            const geometry = loader.parse(contents);
+                            // Pass the filePath; it will be undefined in the browser, which is fine.
+                            addModelToScene(geometry, file.name, { filePath });
+                            resolve();
+                        } catch (e) { reject(`${file.name} işlenemedi.`); }
+                    };
+                    reader.onerror = () => reject(`${file.name} okunamadı.`);
+                    reader.readAsArrayBuffer(file);
                 });
             });
 
@@ -301,20 +329,37 @@
                 });
         }
 
-        function addModelToScene(geometry, name) {
+        function addModelToScene(geometry, name, options = {}) {
+            const { filePath, color, opacity, visible } = options;
+            
             geometry.center();
-            const defaultColor = '#E0E0E0'; // Default color changed from random to light gray
+            const defaultColor = '#E0E0E0';
+            
             const material = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(defaultColor),
+                color: new THREE.Color(color || defaultColor),
                 metalness: 0.1,
                 roughness: 0.5,
-                transparent: false, // Opaque by default
-                opacity: 1,
+                transparent: (opacity !== undefined && opacity < 1.0),
+                opacity: opacity !== undefined ? opacity : 1,
                 side: THREE.DoubleSide,
             });
+
+            // Set depthWrite correctly based on initial opacity
+            material.depthWrite = (opacity === undefined || opacity === 1.0);
+
             const mesh = new THREE.Mesh(geometry, material);
+            mesh.visible = visible !== undefined ? visible : true;
+
             scene.add(mesh);
-            models.push({ uuid: mesh.uuid, name, mesh, color: defaultColor, visible: true, opacity: 1 });
+            models.push({ 
+                uuid: mesh.uuid, 
+                name, 
+                mesh, 
+                filePath,
+                color: color || defaultColor, 
+                visible: mesh.visible, 
+                opacity: opacity !== undefined ? opacity : 1
+            });
             updateSceneBounds();
         }
 
@@ -471,17 +516,16 @@
         }
 
         // --- GLB Export ---
-        function exportToGLB() {
+        function exportToGLB(modelsToExport) {
             hideError();
             const exporter = new GLTFExporter();
-            const visibleModels = models.filter(m => m.visible).map(m => m.mesh);
-
-            if (visibleModels.length === 0) {
-                showError("Dışa aktarılacak görünür model bulunmuyor.");
+            
+            if (modelsToExport.length === 0) {
+                showError("Dışa aktarılacak model seçilmedi.");
                 return;
             }
             const exportGroup = new THREE.Group();
-            visibleModels.forEach(mesh => exportGroup.add(mesh.clone()));
+            modelsToExport.forEach(mesh => exportGroup.add(mesh.clone()));
 
             exporter.parse(exportGroup, (result) => {
                 saveArrayBuffer(result, 'scene.glb');
@@ -521,25 +565,134 @@
         dropZone.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', () => handleFiles(fileInput.files));
         
-        ['dragover', 'dragenter'].forEach(eventName => {
-            dropZone.addEventListener(eventName, (e) => {
+        // --- Drag and Drop Listeners for both Drop Zone and Scene Container ---
+        const dropTargets = [dropZone, sceneContainer];
+        
+        dropTargets.forEach(target => {
+            target.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                dropZone.classList.add('drag-over');
+                if (target === dropZone) {
+                    target.classList.add('drag-over');
+                } else {
+                    sceneDropOverlay.classList.remove('hidden');
+                }
+            });
+
+            target.addEventListener('dragenter', (e) => {
+                e.preventDefault(); // Needed for dragover to work
+            });
+
+            target.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                if (target === dropZone) {
+                    target.classList.remove('drag-over');
+                } else {
+                    // Check if the leave is going to a child element, if not, hide overlay
+                    if (!target.contains(e.relatedTarget)) {
+                        sceneDropOverlay.classList.add('hidden');
+                    }
+                }
+            });
+
+            target.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (target === dropZone) {
+                    target.classList.remove('drag-over');
+                } else {
+                    sceneDropOverlay.classList.add('hidden');
+                }
+                handleFiles(e.dataTransfer.files);
             });
         });
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                dropZone.classList.remove('drag-over');
-            });
-        });
-        dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
 
         modelListContainer.addEventListener('input', handleListInteraction);
         modelListContainer.addEventListener('click', handleListInteraction);
         
-        exportBtn.addEventListener('click', exportToGLB);
+        function showExportModal() {
+            exportModelList.innerHTML = ''; // Clear previous list
+            
+            const visibleModels = models.filter(m => m.visible);
+
+            if (visibleModels.length === 0) {
+                showError("Dışa aktarılacak görünür model bulunmuyor.");
+                return;
+            }
+
+            visibleModels.forEach(model => {
+                const item = document.createElement('label');
+                item.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer';
+                item.innerHTML = `
+                    <input type="checkbox" value="${model.uuid}" checked class="h-4 w-4 rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-600">
+                    <span class="text-sm">${model.name}</span>
+                `;
+                exportModelList.appendChild(item);
+            });
+            exportModal.classList.remove('hidden');
+        }
+
+        function hideExportModal() {
+            exportModal.classList.add('hidden');
+        }
+
+        confirmExportBtn.addEventListener('click', () => {
+            const selectedUuids = Array.from(exportModelList.querySelectorAll('input:checked')).map(input => input.value);
+            const modelsToExport = models.filter(m => selectedUuids.includes(m.uuid)).map(m => m.mesh);
+            exportToGLB(modelsToExport);
+            hideExportModal();
+        });
+
+        cancelExportBtn.addEventListener('click', hideExportModal);
+
+        exportBtn.addEventListener('click', showExportModal);
         gridToggleCheckbox.addEventListener('change', handleGridToggle);
+
+        // --- State Management ---
+        function getCurrentState() {
+          return models.map(model => ({
+            name: model.name,
+            filePath: model.filePath,
+            color: model.color,
+            opacity: model.opacity,
+            visible: model.visible,
+          }));
+        }
+
+        async function loadState(state) {
+            if (!state || !Array.isArray(state)) return;
+
+            loadingText.textContent = "Kaydedilen sahne yükleniyor...";
+            loadingIndicator.classList.remove('hidden');
+
+            for (const modelState of state) {
+                if (!modelState.filePath) continue;
+
+                try {
+                    const contents = await window.electronAPI.readFile(modelState.filePath);
+                    if (contents) {
+                        const loader = new STLLoader();
+                        const geometry = loader.parse(contents);
+                        addModelToScene(geometry, modelState.name, modelState);
+                    }
+                } catch (error) {
+                    showError(`${modelState.name} yüklenemedi: ${error.message}`);
+                }
+            }
+            updateModelList();
+            loadingIndicator.classList.add('hidden');
+        }
+
+        // Save state before the window is closed
+        window.addEventListener('beforeunload', () => {
+            if (models.length > 0) {
+                const state = getCurrentState();
+                window.electronAPI.saveState(state);
+            }
+        });
+
+        // Listen for the state to load from the main process
+        window.electronAPI.onLoadState((state) => {
+            loadState(state);
+        });
 
         // --- Initial Call ---
         init3D();
