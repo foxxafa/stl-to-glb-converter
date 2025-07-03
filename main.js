@@ -3,24 +3,41 @@ const path = require('path');
 const fs = require('fs');
 
 // --- State Management ---
-const stateFilePath = path.join(app.getPath('userData'), 'state.json');
+const userDataPath = app.getPath('userData');
+const stateFilePath = path.join(userDataPath, 'state.json');
+const cacheFolderPath = path.join(userDataPath, 'stl_cache');
+
+console.log(`[Main Process] State file path is: ${stateFilePath}`);
+console.log(`[Main Process] Cache folder path is: ${cacheFolderPath}`);
+
+// Ensure cache directory exists
+if (!fs.existsSync(cacheFolderPath)) {
+    fs.mkdirSync(cacheFolderPath);
+}
 
 function saveState(state) {
   try {
+    console.log('[Main Process] Saving state to file...');
     fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
+    console.log('[Main Process] State saved successfully.');
   } catch (error) {
-    console.error('Failed to save state:', error);
+    console.error('[Main Process] Failed to save state:', error);
   }
 }
 
 function loadState() {
   try {
     if (fs.existsSync(stateFilePath)) {
+      console.log('[Main Process] Found state file. Reading...');
       const stateData = fs.readFileSync(stateFilePath, 'utf-8');
-      return JSON.parse(stateData);
+      const state = JSON.parse(stateData);
+      console.log('[Main Process] State loaded successfully.');
+      return state;
+    } else {
+      console.log('[Main Process] No state file found.');
     }
   } catch (error) {
-    console.error('Failed to load state:', error);
+    console.error('[Main Process] Failed to load state:', error);
   }
   return null;
 }
@@ -28,10 +45,20 @@ function loadState() {
 function deleteStateFile() {
   try {
     if (fs.existsSync(stateFilePath)) {
+      console.log('[Main Process] Deleting state file.');
       fs.unlinkSync(stateFilePath);
+      // Also clear the cache when starting fresh
+      fs.readdirSync(cacheFolderPath).forEach(file => {
+          try {
+              fs.unlinkSync(path.join(cacheFolderPath, file));
+          } catch (err) {
+              console.error(`Failed to delete cached file ${file}:`, err);
+          }
+      });
+      console.log('[Main Process] Cache cleared.');
     }
   } catch (error) {
-    console.error('Failed to delete state file:', error);
+    console.error('[Main Process] Failed to delete state file:', error);
   }
 }
 
@@ -51,7 +78,11 @@ function createWindow () {
     const state = loadState();
     // Only ask if a state exists and has models
     if (state && state.length > 0) {
+      console.log('[Main Process] State file has data. Asking renderer to show load prompt.');
       win.webContents.send('ask-to-load-state');
+    } else {
+      // If no state, tell the renderer it's ready to start fresh.
+      win.webContents.send('state-ready');
     }
   });
 }
@@ -59,7 +90,36 @@ function createWindow () {
 app.whenReady().then(() => {
   // --- IPC Listeners ---
   ipcMain.on('save-state', (event, state) => {
+    console.log('[Main Process] Received save-state request from renderer.');
     saveState(state);
+  });
+
+  ipcMain.handle('cache-file', (event, sourcePath) => {
+      if (!fs.existsSync(sourcePath)) {
+          console.error(`[Main Process] cache-file: Source file does not exist at ${sourcePath}`);
+          return null;
+      }
+      try {
+          const uniqueId = `${Date.now()}-${path.basename(sourcePath)}`;
+          const cachedPath = path.join(cacheFolderPath, uniqueId);
+          fs.copyFileSync(sourcePath, cachedPath);
+          console.log(`[Main Process] Copied ${sourcePath} to ${cachedPath}`);
+          return cachedPath;
+      } catch (error) {
+          console.error(`[Main Process] Failed to cache file ${sourcePath}:`, error);
+          return null;
+      }
+  });
+
+  ipcMain.on('delete-cached-file', (event, filePath) => {
+      if (filePath && fs.existsSync(filePath)) {
+          try {
+              fs.unlinkSync(filePath);
+              console.log(`[Main Process] Deleted cached file: ${filePath}`);
+          } catch (error) {
+              console.error(`[Main Process] Failed to delete cached file ${filePath}:`, error);
+          }
+      }
   });
 
   ipcMain.handle('read-file', async (event, filePath) => {
@@ -74,6 +134,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('confirm-load-state', (event) => {
+    console.log('[Main Process] User confirmed to load previous state. Loading and sending to renderer.');
     const state = loadState();
     if (state) {
       event.sender.send('load-state', state);
@@ -81,6 +142,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('deny-load-state', (event) => {
+    console.log('[Main Process] User denied loading previous state. Deleting old state file.');
     deleteStateFile();
   });
 

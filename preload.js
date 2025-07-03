@@ -9,13 +9,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveState: (state) => ipcRenderer.send('save-state', state),
   confirmLoadState: () => ipcRenderer.send('confirm-load-state'),
   denyLoadState: () => ipcRenderer.send('deny-load-state'),
+  deleteCachedFile: (filePath) => ipcRenderer.send('delete-cached-file', filePath),
   
   // Main to Renderer
   onLoadState: (callback) => ipcRenderer.on('load-state', (_event, value) => callback(value)),
   onAskToLoadState: (callback) => ipcRenderer.on('ask-to-load-state', callback),
+  onStateReady: (callback) => ipcRenderer.on('state-ready', callback),
 
   // Renderer to Main (Invoke for response)
-  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath)
+  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  cacheFile: (sourcePath) => ipcRenderer.invoke('cache-file', sourcePath)
 });
 
 window.addEventListener('DOMContentLoaded', () => {

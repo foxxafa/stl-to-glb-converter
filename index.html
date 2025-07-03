@@ -253,6 +253,7 @@
         // --- Global State ---
         let models = [];
         const DEFAULT_GRID_SIZE = 100;
+        let stateReady = false; // Prevents saving state on initial load
 
         // --- Three.js Scene Setup ---
         let scene, camera, renderer, controls, gridHelper;
@@ -310,15 +311,23 @@
             loadingText.textContent = "Modeller yükleniyor...";
             loadingIndicator.classList.remove('hidden');
 
-            const filePromises = Array.from(files).map(file => {
-                // In Electron, dropped files have a 'path' property. In the browser, this will be undefined.
-                const filePath = file.path; 
-                
-                // We only care about the file extension now.
+            const filePromises = Array.from(files).map(async (file) => {
+                // We only care about the file extension.
                 if (!file.name.toLowerCase().endsWith('.stl')) {
                     return Promise.resolve(); // Ignore non-stl files
                 }
 
+                // In Electron, get a permanent path by caching the file.
+                // In the browser, file.path is undefined, so we'll just read the blob.
+                let finalPath = file.path; 
+                if (window.electronAPI && finalPath) {
+                    finalPath = await window.electronAPI.cacheFile(finalPath);
+                    if (!finalPath) {
+                        showError(`${file.name} dosyası kopyalanamadı ve sahneye eklenemedi.`);
+                        return Promise.resolve();
+                    }
+                }
+                
                 return new Promise((resolve, reject) => {
                     const reader = new FileReader();
                     reader.onload = (event) => {
@@ -326,8 +335,8 @@
                             const contents = event.target.result;
                             const loader = new STLLoader();
                             const geometry = loader.parse(contents);
-                            // Pass the filePath; it will be undefined in the browser, which is fine.
-                            addModelToScene(geometry, file.name, { filePath });
+                            // Pass the permanent cached path.
+                            addModelToScene(geometry, file.name, { filePath: finalPath });
                             resolve();
                         } catch (e) { reject(`${file.name} işlenemedi.`); }
                     };
@@ -432,6 +441,10 @@
                 const modelUuid = removeButton.dataset.uuid;
                 const model = models.find(m => m.uuid === modelUuid);
                 if (model) {
+                    // If the file was cached, tell the main process to delete it.
+                    if (model.filePath && window.electronAPI) {
+                        window.electronAPI.deleteCachedFile(model.filePath);
+                    }
                     scene.remove(model.mesh);
                     model.mesh.geometry.dispose();
                     model.mesh.material.dispose();
@@ -686,6 +699,24 @@
         denyLoadStateBtn.addEventListener('click', () => {
             window.electronAPI.denyLoadState();
             hideLoadStateModal();
+            stateReady = true;
+        });
+
+        // Listen for the state to load from the main process
+        window.electronAPI.onLoadState((state) => {
+            console.log('[Renderer] Received state from main process to load:', state);
+            loadState(state);
+        });
+
+        // Listen for main process asking if we want to load a previous state
+        window.electronAPI.onAskToLoadState(() => {
+            console.log('[Renderer] Received request from main process to ask about loading state. Showing modal.');
+            showLoadStateModal();
+        });
+
+        // Listen for main process telling us we are ready to go (no previous state found)
+        window.electronAPI.onStateReady(() => {
+            stateReady = true;
         });
 
         // --- State Management ---
@@ -724,22 +755,17 @@
         }
 
         function saveCurrentState() {
-            // Can't save state if not in Electron context, as we don't have file paths.
-            if (!window.electronAPI) return;
+            // Do not save until the initial state has been decided (loaded or denied).
+            if (!stateReady || !window.electronAPI) {
+                // console.log('[Renderer] State not ready or not in Electron, skipping save.');
+                return;
+            }
 
+            console.log('[Renderer] A change was detected, preparing to save state...');
             const state = getCurrentState();
+            console.log('[Renderer] Current state:', state);
             window.electronAPI.saveState(state);
         }
-
-        // Listen for the state to load from the main process
-        window.electronAPI.onLoadState((state) => {
-            loadState(state);
-        });
-
-        // Listen for main process asking if we want to load a previous state
-        window.electronAPI.onAskToLoadState(() => {
-            showLoadStateModal();
-        });
 
         // --- Initial Call ---
         init3D();
