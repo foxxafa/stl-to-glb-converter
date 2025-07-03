@@ -211,6 +211,18 @@
         </div>
     </div>
 
+    <!-- Load Previous State Modal -->
+    <div id="load-state-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4 text-center">
+            <h2 class="text-xl font-bold">Önceki Oturum Bulundu</h2>
+            <p class="text-gray-400">Kaydedilmiş bir önceki oturumunuz bulundu. Kaldığınız yerden devam etmek ister misiniz?</p>
+            <div class="flex justify-center gap-4 pt-4">
+                <button id="deny-load-state-btn" class="px-6 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors">Yeni Başla</button>
+                <button id="confirm-load-state-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-bold transition-colors">Evet, Devam Et</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -234,6 +246,9 @@
         const exportModelList = document.getElementById('export-model-list');
         const cancelExportBtn = document.getElementById('cancel-export-btn');
         const confirmExportBtn = document.getElementById('confirm-export-btn');
+        const loadStateModal = document.getElementById('load-state-modal');
+        const confirmLoadStateBtn = document.getElementById('confirm-load-state-btn');
+        const denyLoadStateBtn = document.getElementById('deny-load-state-btn');
 
         // --- Global State ---
         let models = [];
@@ -403,11 +418,13 @@
                 });
             }
             updateExportButtonState();
+            saveCurrentState();
         }
 
         function handleListInteraction(e) {
             const target = e.target;
             const uuid = target.dataset.uuid;
+            let stateChanged = false;
 
             // Handle remove button separately as it's nested
             const removeButton = target.closest('.remove-btn');
@@ -435,9 +452,11 @@
                 model.mesh.visible = model.visible && model.opacity > 0;
                 updateExportButtonState();
                 updateSceneBounds();
+                stateChanged = true;
             } else if (target.matches('.color-picker')) {
                 model.color = target.value;
                 model.mesh.material.color.set(model.color);
+                stateChanged = true;
             } else if (target.matches('.opacity-slider')) {
                 const newOpacity = parseFloat(target.value);
                 model.opacity = newOpacity;
@@ -462,6 +481,11 @@
                 if (opacityValueDisplay) {
                     opacityValueDisplay.textContent = `${Math.round(newOpacity * 100)}%`;
                 }
+                stateChanged = true;
+            }
+
+            if (stateChanged) {
+                saveCurrentState();
             }
         }
         
@@ -646,6 +670,24 @@
         exportBtn.addEventListener('click', showExportModal);
         gridToggleCheckbox.addEventListener('change', handleGridToggle);
 
+        function showLoadStateModal() {
+            loadStateModal.classList.remove('hidden');
+        }
+
+        function hideLoadStateModal() {
+            loadStateModal.classList.add('hidden');
+        }
+
+        confirmLoadStateBtn.addEventListener('click', () => {
+            window.electronAPI.confirmLoadState();
+            hideLoadStateModal();
+        });
+
+        denyLoadStateBtn.addEventListener('click', () => {
+            window.electronAPI.denyLoadState();
+            hideLoadStateModal();
+        });
+
         // --- State Management ---
         function getCurrentState() {
           return models.map(model => ({
@@ -681,17 +723,22 @@
             loadingIndicator.classList.add('hidden');
         }
 
-        // Save state before the window is closed
-        window.addEventListener('beforeunload', () => {
-            if (models.length > 0) {
-                const state = getCurrentState();
-                window.electronAPI.saveState(state);
-            }
-        });
+        function saveCurrentState() {
+            // Can't save state if not in Electron context, as we don't have file paths.
+            if (!window.electronAPI) return;
+
+            const state = getCurrentState();
+            window.electronAPI.saveState(state);
+        }
 
         // Listen for the state to load from the main process
         window.electronAPI.onLoadState((state) => {
             loadState(state);
+        });
+
+        // Listen for main process asking if we want to load a previous state
+        window.electronAPI.onAskToLoadState(() => {
+            showLoadStateModal();
         });
 
         // --- Initial Call ---
