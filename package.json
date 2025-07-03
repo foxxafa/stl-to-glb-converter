@@ -1,0 +1,29 @@
+{
+  "name": "stl-to-glb-converter",
+  "version": "1.0.0",
+  "description": "A 3D STL to GLB converter",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.example.stl-to-glb-converter",
+    "productName": "STL to GLB Converter",
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js"
+    ],
+    "win": {
+      "target": "portable"
+    }
+  }
+}

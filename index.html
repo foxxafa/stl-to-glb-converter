@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D STL'den GLB'ye Dönüştürücü</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Three.js -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        .control-panel {
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .drop-zone {
+            border: 2px dashed #4a5568;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+        }
+        .drop-zone.drag-over {
+            background-color: #2d3748;
+            border-color: #6366f1;
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            width: 28px;
+            height: 28px;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            border-radius: 6px;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch {
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+        }
+        /* Custom scrollbar for control panel */
+        .control-panel::-webkit-scrollbar { width: 6px; }
+        .control-panel::-webkit-scrollbar-track { background: #1f2937; }
+        .control-panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px;}
+        .control-panel::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        /* Custom styles for range slider */
+        input[type="range"].opacity-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            background: linear-gradient(to right, #374151 0%, #6366f1 100%);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        input[type="range"].opacity-slider:hover {
+            background: linear-gradient(to right, #4b5563 0%, #7c3aed 100%);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(99, 102, 241, 0.3);
+        }
+        input[type="range"].opacity-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            border: 2px solid #6366f1;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease-in-out;
+        }
+        input[type="range"].opacity-slider:hover::-webkit-slider-thumb {
+            background: linear-gradient(135deg, #ffffff, #f3f4f6);
+            border-color: #7c3aed;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(99, 102, 241, 0.2);
+            transform: scale(1.1);
+        }
+        input[type="range"].opacity-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            border: 2px solid #6366f1;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Opacity value display */
+        .opacity-value {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-weight: 500;
+            min-width: 2.5rem;
+            text-align: center;
+            background: #374151;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #4b5563;
+        }
+        
+        /* Enhanced model cards */
+        .model-card {
+            background: linear-gradient(135deg, #374151, #4b5563);
+            border: 1px solid #4b5563;
+            transition: all 0.2s ease-in-out;
+        }
+        .model-card:hover {
+            background: linear-gradient(135deg, #4b5563, #6b7280);
+            border-color: #6366f1;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white antialiased flex">
+
+    <!-- 3D PREVIEW AREA (MAIN CONTENT) -->
+    <div class="flex-grow h-screen relative">
+        <div id="scene-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+        <div id="loading-indicator" class="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center rounded-xl hidden z-20">
+            <div class="flex flex-col items-center">
+                <svg class="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p id="loading-text" class="mt-4 text-lg">Model yükleniyor...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTROLS PANEL (SIDEBAR) -->
+    <aside class="w-full max-w-sm bg-gray-800 control-panel border-l border-gray-700">
+        <div class="p-6 space-y-6">
+            
+            <!-- 1. Scene Settings Section -->
+            <div class="bg-gray-900 p-4 rounded-xl">
+                <h2 class="text-lg font-semibold mb-3">1. Sahne Ayarları</h2>
+                <label for="grid-toggle-checkbox" class="flex items-center justify-between cursor-pointer">
+                    <span class="text-sm text-gray-300">Izgarayı Göster</span>
+                    <div class="relative">
+                        <input type="checkbox" id="grid-toggle-checkbox" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </div>
+                </label>
+            </div>
+
+            <!-- 2. Upload & Manage Section -->
+            <div class="bg-gray-900 p-4 rounded-xl">
+                <h2 class="text-lg font-semibold mb-3">2. Modelleri Yükle ve Yönet</h2>
+                <div id="drop-zone" class="drop-zone rounded-lg p-6 text-center cursor-pointer">
+                    <svg class="mx-auto h-10 w-10 text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4V12a4 4 0 014-4h12l4 4h12a4 4 0 014 4v4m-8-8l-4-4m0 0L8 8m16 4v12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                    <p class="mt-2 text-sm text-gray-400">STL dosyalarını sürükleyin veya tıklayın</p>
+                </div>
+                <input type="file" id="file-input" multiple accept=".stl" class="hidden">
+                
+                <div id="model-list" class="space-y-3 mt-4 max-h-80 overflow-y-auto pr-2">
+                    <p id="no-models-message" class="text-gray-500 text-center py-4">Henüz model yüklenmedi.</p>
+                </div>
+            </div>
+
+            <!-- 3. Convert & Download Section -->
+            <div class="bg-gray-900 p-4 rounded-xl">
+                <h2 class="text-lg font-semibold mb-3">3. Dönüştür & İndir</h2>
+                <p class="text-gray-400 text-sm mb-3">Görünür modelleri tek bir GLB dosyası olarak dışa aktarın.</p>
+                <button id="export-glb-btn" disabled class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300">
+                    GLB Olarak Dışa Aktar
+                </button>
+            </div>
+            
+            <div id="error-message" class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg" role="alert">
+                <strong class="font-bold">Hata!</strong>
+                <span class="block sm:inline" id="error-text"></span>
+            </div>
+        </div>
+    </aside>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+        import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+        // --- DOM Element References ---
+        const sceneContainer = document.getElementById('scene-container');
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const modelListContainer = document.getElementById('model-list');
+        const noModelsMessage = document.getElementById('no-models-message');
+        const exportBtn = document.getElementById('export-glb-btn');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingText = document.getElementById('loading-text');
+        const errorMessageDiv = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const gridToggleCheckbox = document.getElementById('grid-toggle-checkbox');
+
+        // --- Global State ---
+        let models = [];
+        const DEFAULT_GRID_SIZE = 100;
+
+        // --- Three.js Scene Setup ---
+        let scene, camera, renderer, controls, gridHelper;
+        let currentGridSize = DEFAULT_GRID_SIZE;
+
+        function init3D() {
+            scene = new THREE.Scene();
+            const bgColor = 0x1f2937;
+            scene.background = new THREE.Color(bgColor);
+            scene.fog = new THREE.Fog(bgColor, currentGridSize * 0.5, currentGridSize * 2);
+
+            camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
+            camera.position.set(20, 20, 20);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            sceneContainer.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            
+            gridHelper = new THREE.GridHelper(currentGridSize, 10, 0x4b5563, 0x4b5563);
+            scene.add(gridHelper);
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+        }
+        
+        // --- File Handling ---
+        function handleFiles(files) {
+            loadingText.textContent = "Modeller yükleniyor...";
+            loadingIndicator.classList.remove('hidden');
+
+            const filePromises = Array.from(files).map(file => {
+                return new Promise((resolve, reject) => {
+                    if (file.name.toLowerCase().endsWith('.stl')) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            try {
+                                const contents = event.target.result;
+                                const loader = new STLLoader();
+                                const geometry = loader.parse(contents);
+                                addModelToScene(geometry, file.name);
+                                resolve();
+                            } catch (e) { reject(`${file.name} işlenemedi.`); }
+                        };
+                        reader.onerror = () => reject(`${file.name} okunamadı.`);
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+
+            Promise.all(filePromises)
+                .catch(err => showError(err))
+                .finally(() => {
+                    loadingIndicator.classList.add('hidden');
+                    updateModelList();
+                });
+        }
+
+        function addModelToScene(geometry, name) {
+            geometry.center();
+            const defaultColor = '#E0E0E0'; // Default color changed from random to light gray
+            const material = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(defaultColor),
+                metalness: 0.1,
+                roughness: 0.5,
+                transparent: true, // Enable transparency for opacity control
+                opacity: 1,
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            models.push({ uuid: mesh.uuid, name, mesh, color: defaultColor, visible: true, opacity: 1 });
+            updateSceneBounds();
+        }
+
+        // --- UI Management ---
+        function updateModelList() {
+            modelListContainer.innerHTML = '';
+            if (models.length === 0) {
+                modelListContainer.appendChild(noModelsMessage);
+                noModelsMessage.classList.remove('hidden');
+            } else {
+                noModelsMessage.classList.add('hidden');
+                models.forEach(model => {
+                    const modelItem = document.createElement('div');
+                    modelItem.className = 'model-card p-4 rounded-xl space-y-3';
+                    modelItem.dataset.uuid = model.uuid;
+                    modelItem.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3 overflow-hidden">
+                               <input type="checkbox" data-uuid="${model.uuid}" ${model.visible ? 'checked' : ''} class="visibility-toggle flex-shrink-0 h-4 w-4 rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-600">
+                               <span class="truncate text-sm font-medium text-gray-100" title="${model.name}">${model.name}</span>
+                            </div>
+                            <button data-uuid="${model.uuid}" class="remove-btn text-gray-400 hover:text-red-400 transition-colors flex-shrink-0 p-1 rounded hover:bg-red-900">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 pointer-events-none" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+                            </button>
+                        </div>
+                        <div class="space-y-3 pt-3 border-t border-gray-600">
+                            <div class="flex items-center justify-between gap-3">
+                                <label class="text-xs text-gray-300 font-medium">Renk</label>
+                                <input type="color" data-uuid="${model.uuid}" value="${model.color}" class="color-picker shadow-md">
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <label for="opacity-slider-${model.uuid}" class="text-xs text-gray-300 font-medium">Şeffaflık</label>
+                                    <span class="opacity-value" data-uuid="${model.uuid}">${Math.round(model.opacity * 100)}%</span>
+                                </div>
+                                <input type="range" id="opacity-slider-${model.uuid}" data-uuid="${model.uuid}" min="0" max="1" step="0.01" value="${model.opacity}" class="opacity-slider">
+                            </div>
+                        </div>
+                    `;
+                    modelListContainer.appendChild(modelItem);
+                });
+            }
+            updateExportButtonState();
+        }
+
+        function handleListInteraction(e) {
+            const target = e.target;
+            const uuid = target.dataset.uuid;
+
+            // Handle remove button separately as it's nested
+            const removeButton = target.closest('.remove-btn');
+            if (removeButton) {
+                const modelUuid = removeButton.dataset.uuid;
+                const model = models.find(m => m.uuid === modelUuid);
+                if (model) {
+                    scene.remove(model.mesh);
+                    model.mesh.geometry.dispose();
+                    model.mesh.material.dispose();
+                    models = models.filter(m => m.uuid !== modelUuid);
+                    updateModelList();
+                    updateSceneBounds();
+                }
+                return;
+            }
+            
+            if (!uuid) return;
+            const model = models.find(m => m.uuid === uuid);
+            if (!model) return;
+
+            if (target.matches('.visibility-toggle')) {
+                model.visible = target.checked;
+                model.mesh.visible = model.visible;
+                updateExportButtonState();
+                updateSceneBounds();
+            } else if (target.matches('.color-picker')) {
+                model.color = target.value;
+                model.mesh.material.color.set(model.color);
+            } else if (target.matches('.opacity-slider')) {
+                const newOpacity = parseFloat(target.value);
+                model.opacity = newOpacity;
+                model.mesh.material.opacity = newOpacity;
+                
+                // Update opacity value display
+                const opacityValueDisplay = document.querySelector(`.opacity-value[data-uuid="${uuid}"]`);
+                if (opacityValueDisplay) {
+                    opacityValueDisplay.textContent = `${Math.round(newOpacity * 100)}%`;
+                }
+            }
+        }
+        
+        function updateExportButtonState() {
+            exportBtn.disabled = !models.some(m => m.visible);
+        }
+
+        function updateSceneBounds() {
+            const visibleModels = models.filter(m => m.visible);
+            
+            if (visibleModels.length === 0) {
+                if (currentGridSize !== DEFAULT_GRID_SIZE) {
+                    scene.remove(gridHelper);
+                    currentGridSize = DEFAULT_GRID_SIZE;
+                    gridHelper = new THREE.GridHelper(currentGridSize, 10, 0x4b5563, 0x4b5563);
+                    gridHelper.visible = gridToggleCheckbox.checked;
+                    scene.add(gridHelper);
+                    controls.target.set(0, 0, 0);
+                    scene.fog.near = currentGridSize * 0.5;
+                    scene.fog.far = currentGridSize * 2;
+                }
+                return;
+            }
+
+            const box = new THREE.Box3();
+            visibleModels.forEach(modelData => {
+                box.expandByObject(modelData.mesh);
+            });
+
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            const maxSize = Math.max(size.x, size.z);
+            const fitSize = maxSize * 4.0; 
+            const newGridSize = Math.max(DEFAULT_GRID_SIZE, Math.ceil(fitSize / 20) * 20);
+
+            if (Math.abs(newGridSize - currentGridSize) / currentGridSize < 0.50) {
+                controls.target.copy(center);
+                return; 
+            }
+            
+            currentGridSize = newGridSize;
+            scene.remove(gridHelper);
+            gridHelper = new THREE.GridHelper(currentGridSize, 20, 0x4b5563, 0x4b5563);
+            gridHelper.visible = gridToggleCheckbox.checked;
+            scene.add(gridHelper);
+
+            scene.fog.near = currentGridSize * 0.5;
+            scene.fog.far = currentGridSize * 2;
+
+            controls.target.copy(center);
+        }
+
+        // --- GLB Export ---
+        function exportToGLB() {
+            hideError();
+            const exporter = new GLTFExporter();
+            const visibleModels = models.filter(m => m.visible).map(m => m.mesh);
+
+            if (visibleModels.length === 0) {
+                showError("Dışa aktarılacak görünür model bulunmuyor.");
+                return;
+            }
+            const exportGroup = new THREE.Group();
+            visibleModels.forEach(mesh => exportGroup.add(mesh.clone()));
+
+            exporter.parse(exportGroup, (result) => {
+                saveArrayBuffer(result, 'scene.glb');
+            }, (error) => {
+                showError('GLB dönüştürme sırasında bir hata oluştu.');
+                console.error('GLTFExporter error:', error);
+            }, { binary: true });
+        }
+
+        function saveArrayBuffer(buffer, filename) {
+            const blob = new Blob([buffer], { type: 'application/octet-stream' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+        
+        // --- Error Handling ---
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessageDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorMessageDiv.classList.add('hidden');
+        }
+        
+        function handleGridToggle(e) {
+            if (gridHelper) {
+                gridHelper.visible = e.target.checked;
+            }
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('resize', onWindowResize);
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+        
+        ['dragover', 'dragenter'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+            });
+        });
+        dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+
+        modelListContainer.addEventListener('input', handleListInteraction);
+        modelListContainer.addEventListener('click', handleListInteraction);
+        
+        exportBtn.addEventListener('click', exportToGLB);
+        gridToggleCheckbox.addEventListener('change', handleGridToggle);
+
+        // --- Initial Call ---
+        init3D();
+        updateModelList();
+    </script>
+</body>
+</html>
