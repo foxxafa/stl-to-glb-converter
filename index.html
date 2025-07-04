@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D STL'den GLB'ye Dönüştürücü (AlphaHash Çözümü)</title>
+    <title>3D STL'den GLB'ye Dönüştürücü (Nihai Sürüm)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -47,13 +47,10 @@
             border: 1px solid #4a5568;
             border-radius: 6px;
         }
-        /* Custom scrollbar for control panel */
         .control-panel::-webkit-scrollbar { width: 6px; }
         .control-panel::-webkit-scrollbar-track { background: #1f2937; }
         .control-panel::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px;}
         .control-panel::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-
-        /* Custom styles for range slider */
         input[type="range"].opacity-slider {
             -webkit-appearance: none;
             appearance: none;
@@ -98,9 +95,8 @@
     <aside class="w-full max-w-sm bg-gray-800 control-panel border-l border-gray-700">
         <div class="p-6 space-y-6">
             
-            <!-- 1. Scene Settings Section -->
-            <div class="bg-gray-900 p-4 rounded-xl">
-                <h2 class="text-lg font-semibold mb-3">1. Sahne Ayarları</h2>
+            <div class="bg-gray-900 p-4 rounded-xl space-y-4">
+                <h2 class="text-lg font-semibold">1. Sahne Ayarları</h2>
                 <label for="grid-toggle-checkbox" class="flex items-center justify-between cursor-pointer">
                     <span class="text-sm text-gray-300">Izgarayı Göster</span>
                     <div class="relative">
@@ -108,19 +104,24 @@
                         <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </div>
                 </label>
+                <div class="space-y-2">
+                    <label for="transparency-mode" class="text-sm font-medium text-gray-300">Şeffaflık Yöntemi</label>
+                    <select id="transparency-mode" class="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
+                        <option value="hash" selected>Stabil (Önerilen)</option>
+                        <option value="blend">Pürüzsüz (Deneysel)</option>
+                    </select>
+                    <p class="text-xs text-gray-500">Karmaşık modellerde "Stabil" kullanın. "Pürüzsüz" bazı durumlarda daha iyi görünebilir ama hatalara yol açabilir.</p>
+                </div>
             </div>
 
-            <!-- 2. Model Management Section -->
             <div class="bg-gray-900 p-4 rounded-xl">
                 <h2 class="text-lg font-semibold mb-3">2. Model Yönetimi</h2>
                 <p class="text-gray-400 text-sm mb-3">STL dosyalarını sahneye sürükleyin veya aşağıdan yönetin.</p>
-                
                 <div id="model-list" class="space-y-3 max-h-80 overflow-y-auto pr-2">
                     <p id="no-models-message" class="text-gray-500 text-center py-4">Henüz model yüklenmedi.</p>
                 </div>
             </div>
 
-            <!-- 3. Convert & Download Section -->
             <div class="bg-gray-900 p-4 rounded-xl">
                 <h2 class="text-lg font-semibold mb-3">3. Dönüştür & İndir</h2>
                 <p class="text-gray-400 text-sm mb-3">Görünür modelleri tek bir GLB dosyası olarak dışa aktarın.</p>
@@ -136,6 +137,33 @@
         </div>
     </aside>
 
+    <!-- Export Modal -->
+    <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4">
+            <h2 class="text-xl font-bold">GLB Olarak Dışa Aktar</h2>
+            <p class="text-gray-400">Dışa aktarılacak modelleri seçin.</p>
+            <div id="export-model-list" class="space-y-2 max-h-60 overflow-y-auto border border-gray-700 p-3 rounded-lg">
+                <!-- Model items will be injected here -->
+            </div>
+            <div class="flex justify-end gap-4 pt-4">
+                <button id="cancel-export-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors">İptal</button>
+                <button id="confirm-export-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-bold transition-colors">Seçilenleri Dışa Aktar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Previous State Modal -->
+    <div id="load-state-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4 text-center">
+            <h2 class="text-xl font-bold">Önceki Oturum Bulundu</h2>
+            <p class="text-gray-400">Kaydedilmiş bir önceki oturumunuz bulundu. Kaldığınız yerden devam etmek ister misiniz?</p>
+            <div class="flex justify-center gap-4 pt-4">
+                <button id="deny-load-state-btn" class="px-6 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors">Yeni Başla</button>
+                <button id="confirm-load-state-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-bold transition-colors">Evet, Devam Et</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -148,13 +176,24 @@
         const noModelsMessage = document.getElementById('no-models-message');
         const exportBtn = document.getElementById('export-glb-btn');
         const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingText = document.getElementById('loading-text');
         const errorText = document.getElementById('error-text');
         const errorMessageDiv = document.getElementById('error-message');
         const gridToggleCheckbox = document.getElementById('grid-toggle-checkbox');
         const sceneDropOverlay = document.getElementById('scene-drop-overlay');
+        const transparencyModeSelector = document.getElementById('transparency-mode');
+        const exportModal = document.getElementById('export-modal');
+        const exportModelList = document.getElementById('export-model-list');
+        const cancelExportBtn = document.getElementById('cancel-export-btn');
+        const confirmExportBtn = document.getElementById('confirm-export-btn');
+        const loadStateModal = document.getElementById('load-state-modal');
+        const confirmLoadStateBtn = document.getElementById('confirm-load-state-btn');
+        const denyLoadStateBtn = document.getElementById('deny-load-state-btn');
 
         // --- Global State ---
-        let models = []; // Array of logical model objects
+        let models = [];
+        let transparencyMode = 'hash'; // 'hash' (stable) or 'blend' (smooth)
+        let stateReady = false; // Prevents saving state on initial load
         const DEFAULT_GRID_SIZE = 100;
 
         // --- Three.js Scene Setup ---
@@ -170,14 +209,12 @@
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
-            // Sorting is no longer the primary method, but doesn't hurt to leave on.
             renderer.sortObjects = true;
             sceneContainer.appendChild(renderer.domElement);
 
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
 
-            // Lighting
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
             scene.add(ambientLight);
             const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -202,22 +239,32 @@
             renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
         }
         
-        // --- File Handling ---
-        function handleFiles(files) {
+        async function handleFiles(files) {
+            loadingText.textContent = "Modeller yükleniyor...";
             loadingIndicator.classList.remove('hidden');
+
             const filePromises = Array.from(files)
                 .filter(file => file.name.toLowerCase().endsWith('.stl'))
-                .map(file => new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        try {
-                            const geometry = new STLLoader().parse(event.target.result);
-                            addModelToScene(geometry, file.name);
-                            resolve();
-                        } catch (e) { reject(`Dosya işlenemedi: ${file.name}`); }
-                    };
-                    reader.onerror = () => reject(`Dosya okunamadı: ${file.name}`);
-                    reader.readAsArrayBuffer(file);
+                .map(file => new Promise(async (resolve, reject) => {
+                    try {
+                        const contents = await file.arrayBuffer();
+                        const geometry = new STLLoader().parse(contents);
+                        
+                        let cachedPath = null;
+                        if (window.electronAPI) {
+                            cachedPath = await window.electronAPI.cacheFileData(file.name, contents);
+                            if (!cachedPath) {
+                                console.error(`[Renderer] Failed to cache file ${file.name}`);
+                                showError(`${file.name} dosyası kopyalanamadı. Uygulama yeniden başlatıldığında bu model kaybolacak.`);
+                            }
+                        }
+                        
+                        addModelToScene(geometry, file.name, { filePath: cachedPath });
+                        resolve();
+                    } catch (e) {
+                        console.error(`Error processing file ${file.name}:`, e);
+                        reject(`Dosya işlenemedi: ${file.name}`);
+                    }
                 }));
 
             Promise.all(filePromises)
@@ -228,39 +275,78 @@
                 });
         }
 
-        /**
-         * FINAL FIX: Uses a single mesh with alphaHash for stable, order-independent transparency.
-         * This sacrifices smoothness for correctness and stability, eliminating all sorting artifacts.
-         */
-        function addModelToScene(geometry, name) {
-            // A single material is now used.
-            const material = new THREE.MeshStandardMaterial({
-                color: 0xE0E0E0,
-                transparent: true, // Must be true for both opacity and alphaHash
-                opacity: 1.0,
-                side: THREE.DoubleSide, // Render both sides of the geometry
-                
-                // --- THE CORE FIX ---
-                alphaHash: true, // Use dithering/stippling instead of blending
-                depthWrite: true // alphaHash works correctly with depthWrite enabled
-            });
-            
-            const mesh = new THREE.Mesh(geometry, material);
-            
-            const model = { 
-                uuid: mesh.uuid, // Use the mesh's UUID directly
-                name, 
-                mesh, // We only have one mesh now
-                color: '#e0e0e0', 
-                visible: true, 
-                opacity: 1.0
+        function addModelToScene(geometry, name, options = {}) {
+            const modelData = {
+                name,
+                filePath: options.filePath,
+                color: options.color || '#e0e0e0',
+                opacity: options.opacity !== undefined ? options.opacity : 1.0,
+                visible: options.visible !== false,
             };
+
+            let model;
+            if (transparencyMode === 'hash') {
+                const material = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(modelData.color),
+                    transparent: true,
+                    opacity: modelData.opacity,
+                    side: THREE.DoubleSide,
+                    alphaHash: true,
+                    depthWrite: true
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.visible = modelData.visible;
+                if(options.position) mesh.position.set(options.position.x, options.position.y, options.position.z);
+                if(options.rotation) mesh.rotation.set(options.rotation.x, options.rotation.y, options.rotation.z);
+                if(options.scale) mesh.scale.set(options.scale.x, options.scale.y, options.scale.z);
+
+                model = { ...modelData, uuid: mesh.uuid, mesh, isBlend: false };
+                scene.add(mesh);
+            } else { // 'blend' mode
+                const frontMaterial = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(modelData.color),
+                    transparent: true,
+                    opacity: modelData.opacity,
+                    side: THREE.FrontSide,
+                    depthWrite: modelData.opacity >= 1.0,
+                });
+                const backMaterial = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(modelData.color),
+                    transparent: true,
+                    opacity: modelData.opacity,
+                    side: THREE.BackSide,
+                    depthWrite: modelData.opacity >= 1.0,
+                });
+                
+                const frontMesh = new THREE.Mesh(geometry, frontMaterial);
+                const backMesh = new THREE.Mesh(geometry, backMaterial);
+                frontMesh.visible = modelData.visible;
+                backMesh.visible = modelData.visible;
+
+                if(options.position) {
+                    frontMesh.position.copy(options.position);
+                    backMesh.position.copy(options.position);
+                }
+                if(options.rotation) {
+                    frontMesh.rotation.copy(options.rotation);
+                    backMesh.rotation.copy(options.rotation);
+                }
+                 if(options.scale) {
+                    frontMesh.scale.copy(options.scale);
+                    backMesh.scale.copy(options.scale);
+                }
+
+                const renderOrderBase = models.length * 2;
+                backMesh.renderOrder = renderOrderBase;
+                frontMesh.renderOrder = renderOrderBase + 1;
+
+                model = { ...modelData, uuid: THREE.MathUtils.generateUUID(), frontMesh, backMesh, isBlend: true };
+                scene.add(frontMesh);
+                scene.add(backMesh);
+            }
             models.push(model);
-            
-            scene.add(mesh);
         }
 
-        // --- UI Management ---
         function updateModelList() {
             modelListContainer.innerHTML = '';
             if (models.length === 0) {
@@ -300,6 +386,7 @@
             }
             updateSceneAndCamera();
             updateExportButtonState();
+            saveCurrentState();
         }
 
         function handleListInteraction(e) {
@@ -313,32 +400,77 @@
 
             switch (action) {
                 case 'remove':
-                    scene.remove(model.mesh);
-                    model.mesh.geometry.dispose();
-                    model.mesh.material.dispose();
-                    models = models.filter(m => m.uuid !== uuid);
+                    removeModel(model, true); // User delete, so dispose geometry
+                    if (transparencyMode === 'blend') {
+                        models.forEach((m, index) => {
+                            if (!m.isBlend) return;
+                            const renderOrderBase = index * 2;
+                            m.backMesh.renderOrder = renderOrderBase;
+                            m.frontMesh.renderOrder = renderOrderBase + 1;
+                        });
+                    }
                     updateModelList();
                     break;
                 case 'toggle-visibility':
                     model.visible = e.target.checked;
-                    model.mesh.visible = model.visible;
+                    if (model.isBlend) {
+                        model.frontMesh.visible = model.visible;
+                        model.backMesh.visible = model.visible;
+                    } else {
+                        model.mesh.visible = model.visible;
+                    }
                     updateSceneAndCamera();
                     updateExportButtonState();
+                    saveCurrentState();
                     break;
                 case 'change-color':
                     model.color = e.target.value;
-                    model.mesh.material.color.set(model.color);
+                    if (model.isBlend) {
+                        model.frontMesh.material.color.set(model.color);
+                        model.backMesh.material.color.set(model.color);
+                    } else {
+                        model.mesh.material.color.set(model.color);
+                    }
+                    saveCurrentState();
                     break;
                 case 'change-opacity':
                     const newOpacity = parseFloat(e.target.value);
                     model.opacity = newOpacity;
-                    model.mesh.material.opacity = newOpacity;
-                    
-                    // The material properties (alphaHash, depthWrite) are set once and don't need to change.
-                    
+                    if (model.isBlend) {
+                        model.frontMesh.material.opacity = newOpacity;
+                        model.backMesh.material.opacity = newOpacity;
+                        const isTransparent = newOpacity < 1.0;
+                        model.frontMesh.material.depthWrite = !isTransparent;
+                        model.backMesh.material.depthWrite = !isTransparent;
+                    } else {
+                        model.mesh.material.opacity = newOpacity;
+                    }
                     card.querySelector('.opacity-value').textContent = `${Math.round(newOpacity * 100)}%`;
+                    saveCurrentState();
                     break;
             }
+        }
+
+        function removeModel(modelToRemove, disposeGeometry = true) {
+            if (modelToRemove.isBlend) {
+                scene.remove(modelToRemove.frontMesh);
+                scene.remove(modelToRemove.backMesh);
+                if (disposeGeometry && modelToRemove.frontMesh.geometry) {
+                    modelToRemove.frontMesh.geometry.dispose();
+                }
+                if(modelToRemove.frontMesh.material) modelToRemove.frontMesh.material.dispose();
+                if(modelToRemove.backMesh.material) modelToRemove.backMesh.material.dispose();
+            } else {
+                scene.remove(modelToRemove.mesh);
+                if (disposeGeometry && modelToRemove.mesh.geometry) {
+                    modelToRemove.mesh.geometry.dispose();
+                }
+                if(modelToRemove.mesh.material) modelToRemove.mesh.material.dispose();
+            }
+            if (modelToRemove.filePath && window.electronAPI) {
+                window.electronAPI.deleteCachedFile(modelToRemove.filePath);
+            }
+            models = models.filter(m => m.uuid !== modelToRemove.uuid);
         }
         
         function updateExportButtonState() {
@@ -361,7 +493,7 @@
 
             const box = new THREE.Box3();
             visibleModels.forEach(modelData => {
-                box.expandByObject(modelData.mesh);
+                box.expandByObject(modelData.isBlend ? modelData.frontMesh : modelData.mesh);
             });
 
             const size = box.getSize(new THREE.Vector3());
@@ -372,9 +504,7 @@
             const distance = (maxSize / 2) / Math.tan((camera.fov * Math.PI / 180) / 2) * fitOffset;
             
             const direction = controls.object.position.clone().sub(controls.target).normalize();
-            if (direction.lengthSq() === 0) {
-                direction.set(0, 0, 1);
-            }
+            if (direction.lengthSq() === 0) direction.set(0, 0, 1);
             camera.position.copy(direction.multiplyScalar(distance).add(center));
             
             camera.near = Math.max(0.1, distance - maxSize);
@@ -392,20 +522,49 @@
             controls.update();
         }
 
+        function showExportModal() {
+            exportModelList.innerHTML = '';
+            const visibleModels = models.filter(m => m.visible);
+            if (visibleModels.length === 0) {
+                showError("Dışa aktarılacak görünür model bulunmuyor.");
+                return;
+            }
+            visibleModels.forEach(model => {
+                const item = document.createElement('label');
+                item.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer';
+                item.innerHTML = `
+                    <input type="checkbox" value="${model.uuid}" checked class="h-4 w-4 rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-600">
+                    <span class="text-sm">${model.name}</span>
+                `;
+                exportModelList.appendChild(item);
+            });
+            exportModal.classList.remove('hidden');
+        }
+
+        function hideExportModal() {
+            exportModal.classList.add('hidden');
+        }
+
         function exportToGLB() {
             hideError();
+            const selectedUuids = Array.from(exportModelList.querySelectorAll('input:checked')).map(input => input.value);
+            const modelsToExport = models.filter(m => selectedUuids.includes(m.uuid));
+
+            if (modelsToExport.length === 0) {
+                showError("Dışa aktarılacak model seçilmedi.");
+                return;
+            }
+
             const exporter = new GLTFExporter();
             const exportGroup = new THREE.Group();
             
-            const modelsToExport = models.filter(m => m.visible);
-            if (modelsToExport.length === 0) {
-                showError("Dışa aktarılacak görünür model yok.");
-                return;
-            }
-            
             modelsToExport.forEach(model => {
-                // Since we now use a single mesh, we can just clone it.
-                exportGroup.add(model.mesh.clone());
+                const meshToExport = model.isBlend ? model.frontMesh : model.mesh;
+                const exportMaterial = meshToExport.material.clone();
+                exportMaterial.side = THREE.DoubleSide;
+                exportMaterial.alphaHash = false; 
+                const exportMesh = new THREE.Mesh(meshToExport.geometry, exportMaterial);
+                exportGroup.add(exportMesh);
             });
 
             exporter.parse(exportGroup, (result) => {
@@ -415,21 +574,93 @@
                 link.download = 'scene.glb';
                 link.click();
                 URL.revokeObjectURL(link.href);
+                hideExportModal();
             }, (error) => {
                 showError('GLB dönüştürme sırasında bir hata oluştu.');
                 console.error('GLTFExporter error:', error);
-            }, { binary: true });
+            });
         }
         
-        function showError(message) {
-            errorText.textContent = message;
-            errorMessageDiv.classList.remove('hidden');
+        function setTransparencyMode(newMode) {
+            if (transparencyMode === newMode) return;
+            transparencyMode = newMode;
+
+            const currentStates = models.map(m => ({
+                geometry: m.isBlend ? m.frontMesh.geometry : m.mesh.geometry,
+                name: m.name,
+                filePath: m.filePath,
+                color: m.color,
+                opacity: m.opacity,
+                visible: m.visible,
+                position: m.isBlend ? m.frontMesh.position.clone() : m.mesh.position.clone(),
+                rotation: m.isBlend ? m.frontMesh.rotation.clone() : m.mesh.rotation.clone(),
+                scale: m.isBlend ? m.frontMesh.scale.clone() : m.mesh.scale.clone(),
+            }));
+
+            while(models.length > 0) {
+                removeModel(models[0], false);
+            }
+            
+            currentStates.forEach(state => {
+                addModelToScene(state.geometry, state.name, state);
+            });
+
+            updateModelList();
         }
 
-        function hideError() {
-            errorMessageDiv.classList.add('hidden');
-        }
+        function showError(message) { errorText.textContent = message; errorMessageDiv.classList.remove('hidden'); }
+        function hideError() { errorMessageDiv.classList.add('hidden'); }
         
+        // --- State Management ---
+        function getCurrentState() {
+            return models.map(model => {
+                const mesh = model.isBlend ? model.frontMesh : model.mesh;
+                return {
+                    name: model.name,
+                    filePath: model.filePath,
+                    color: model.color,
+                    opacity: model.opacity,
+                    visible: model.visible,
+                    position: mesh.position.clone(),
+                    rotation: mesh.rotation.clone(),
+                    scale: mesh.scale.clone(),
+                };
+            });
+        }
+
+        function saveCurrentState() {
+            if (!stateReady || !window.electronAPI) return;
+            const state = getCurrentState();
+            window.electronAPI.saveState(state);
+        }
+
+        async function loadState(state) {
+            if (!state || !Array.isArray(state)) return;
+
+            loadingText.textContent = "Kaydedilen sahne yükleniyor...";
+            loadingIndicator.classList.remove('hidden');
+
+            for (const modelState of state) {
+                if (!modelState.filePath) {
+                    console.error(`SKIPPING model ${modelState.name} because filePath is missing.`);
+                    continue;
+                }
+                try {
+                    const contents = await window.electronAPI.readFile(modelState.filePath);
+                    if (contents) {
+                        const geometry = new STLLoader().parse(contents);
+                        addModelToScene(geometry, modelState.name, modelState);
+                    } else {
+                        showError(`Model dosyası bulunamadı: ${modelState.name}`);
+                    }
+                } catch (error) {
+                    showError(`${modelState.name} yüklenemedi: ${error.message}`);
+                }
+            }
+            updateModelList();
+            loadingIndicator.classList.add('hidden');
+        }
+
         // --- Event Listeners ---
         window.addEventListener('resize', onWindowResize);
         sceneContainer.addEventListener('dragover', (e) => { e.preventDefault(); sceneDropOverlay.classList.remove('hidden'); });
@@ -437,12 +668,40 @@
         sceneContainer.addEventListener('drop', (e) => { e.preventDefault(); sceneDropOverlay.classList.add('hidden'); handleFiles(e.dataTransfer.files); });
         modelListContainer.addEventListener('input', handleListInteraction);
         modelListContainer.addEventListener('click', handleListInteraction);
-        exportBtn.addEventListener('click', exportToGLB);
+        exportBtn.addEventListener('click', showExportModal);
+        confirmExportBtn.addEventListener('click', exportToGLB);
+        cancelExportBtn.addEventListener('click', hideExportModal);
         gridToggleCheckbox.addEventListener('change', (e) => { if (gridHelper) gridHelper.visible = e.target.checked; });
+        transparencyModeSelector.addEventListener('change', (e) => setTransparencyMode(e.target.value));
+        
+        // Electron API Listeners for State Management
+        if (window.electronAPI) {
+            confirmLoadStateBtn.addEventListener('click', () => {
+                window.electronAPI.confirmLoadState();
+                loadStateModal.classList.add('hidden');
+            });
+            denyLoadStateBtn.addEventListener('click', () => {
+                window.electronAPI.denyLoadState();
+                loadStateModal.classList.add('hidden');
+                stateReady = true;
+            });
+            window.electronAPI.onLoadState((state) => {
+                loadState(state).then(() => { stateReady = true; });
+            });
+            window.electronAPI.onAskToLoadState(() => {
+                loadStateModal.classList.remove('hidden');
+            });
+            window.electronAPI.onStateReady(() => {
+                stateReady = true;
+            });
+        } else {
+            console.warn("Electron API not found. State management will be disabled.");
+            stateReady = true; // Enable functionality in browser without saving
+        }
 
         // --- Initial Call ---
         init3D();
         updateModelList();
     </script>
 </body>
-</html>
+</ht
