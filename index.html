@@ -375,28 +375,30 @@
         }
 
         function addModelToScene(geometry, name, options = {}) {
-            const { filePath, color, opacity, visible, depthPriority } = options;
+            const { filePath, color, opacity, visible, renderPriority } = options; // 'depthPriority' -> 'renderPriority' oldu
             
             const defaultColor = '#E0E0E0';
             const initialOpacity = opacity !== undefined ? opacity : 1.0;
-            const initialDepthPriority = depthPriority !== undefined ? depthPriority : 0;
-            
+            const initialRenderPriority = renderPriority !== undefined ? renderPriority : 0; // Yeni adıyla tanımlandı
+
             const material = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(color || defaultColor),
                 metalness: 0.1,
                 roughness: 0.5,
-                transparent: true, // ALWAYS true to prevent shader re-compilation 'jump'.
+                transparent: true,
                 opacity: initialOpacity,
                 side: THREE.DoubleSide,
                 polygonOffset: true,
-                polygonOffsetFactor: initialDepthPriority,
-                polygonOffsetUnits: initialDepthPriority
+                polygonOffsetFactor: -1.0, // Sabit, düşük bir değere ayarlıyoruz
+                polygonOffsetUnits: -1.0   // Sabit, düşük bir değere ayarlıyoruz
             });
 
             material.depthWrite = initialOpacity >= 1.0;
             const mesh = new THREE.Mesh(geometry, material);
             mesh.visible = visible !== undefined ? visible : true;
-            mesh.renderOrder = initialOpacity < 1.0 ? 1 : 0;
+            
+            // !!! EN ÖNEMLİ DEĞİŞİKLİK: renderOrder doğrudan kullanıcı kontrolündeki değere atanıyor
+            mesh.renderOrder = initialRenderPriority;
 
             scene.add(mesh);
             models.push({ 
@@ -407,7 +409,7 @@
                 color: color || defaultColor, 
                 visible: mesh.visible, 
                 opacity: opacity !== undefined ? opacity : 1,
-                depthPriority: initialDepthPriority
+                renderPriority: initialRenderPriority // State'i yeni adıyla kaydediyoruz
             });
             updateSceneBounds();
         }
@@ -448,8 +450,8 @@
                             </div>
                             <div class="space-y-2">
                                 <div class="flex items-center justify-between">
-                                    <label for="depth-input-${model.uuid}" class="text-xs text-gray-300 font-medium">Derinlik Önceliği</label>
-                                    <input type="number" id="depth-input-${model.uuid}" data-uuid="${model.uuid}" value="${model.depthPriority || 0}" step="1" class="depth-priority-input w-20 bg-gray-700 text-white text-xs rounded border border-gray-600 px-2 py-1 text-center">
+                                    <label for="render-priority-input-${model.uuid}" class="text-xs text-gray-300 font-medium">Çizim Önceliği</label>
+                                    <input type="number" id="render-priority-input-${model.uuid}" data-uuid="${model.uuid}" value="${model.renderPriority || 0}" step="1" class="render-priority-input w-20 bg-gray-700 text-white text-xs rounded border border-gray-600 px-2 py-1 text-center">
                                 </div>
                             </div>
                         </div>
@@ -507,10 +509,11 @@
                 model.opacity = newOpacity;
                 model.mesh.material.opacity = newOpacity;
 
-                // CRITICAL: depthWrite ve renderOrder'ı opaklığa göre güncelle.
+                // CRITICAL: Sadece depthWrite'ı opaklığa göre güncelle.
+                // renderOrder artık manuel kontrol ediliyor.
                 const isTransparent = newOpacity < 1.0;
                 model.mesh.material.depthWrite = !isTransparent;
-                model.mesh.renderOrder = isTransparent ? 1 : 0;
+                // model.mesh.renderOrder = isTransparent ? 1 : 0; // BU SATIRI SİLİN VEYA YORUMA ALIN
                 
                 // Update opacity value display
                 const opacityValueDisplay = document.querySelector(`.opacity-value[data-uuid="${uuid}"]`);
@@ -518,13 +521,12 @@
                     opacityValueDisplay.textContent = `${Math.round(newOpacity * 100)}%`;
                 }
                 stateChanged = true;
-            } else if (target.matches('.depth-priority-input')) {
+            } else if (target.matches('.render-priority-input')) {
                 const newPriority = parseInt(target.value, 10);
                 if (isNaN(newPriority)) return;
 
-                model.depthPriority = newPriority;
-                model.mesh.material.polygonOffsetFactor = newPriority;
-                model.mesh.material.polygonOffsetUnits = newPriority;
+                model.renderPriority = newPriority;
+                model.mesh.renderOrder = newPriority; // DOĞRU ÖZELLİĞİ GÜNCELLİYORUZ
                 stateChanged = true;
             }
 
@@ -771,7 +773,7 @@
               color: model.color,
               opacity: model.opacity,
               visible: model.visible,
-              depthPriority: model.depthPriority,
+              renderPriority: model.renderPriority, // 'depthPriority' -> 'renderPriority'
               position: {
                 x: model.mesh.position.x,
                 y: model.mesh.position.y,
