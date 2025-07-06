@@ -479,7 +479,7 @@
         const DEFAULT_GRID_SIZE = 100;
 
         // --- Three.js Scene Setup ---
-        let scene, camera, renderer, controls, gridHelper, subGridHelper;
+        let scene, camera, renderer, controls, gridHelper;
 
         function init3D() {
             scene = new THREE.Scene();
@@ -503,76 +503,13 @@
             directionalLight.position.set(5, 10, 7.5);
             scene.add(directionalLight);
             
-            createAdaptiveGrid();
+            gridHelper = new THREE.GridHelper(DEFAULT_GRID_SIZE, Math.max(10, DEFAULT_GRID_SIZE / 10), 0x4b5563, 0x4b5563);
+            scene.add(gridHelper);
 
             animate();
         }
 
-        function createAdaptiveGrid(size = DEFAULT_GRID_SIZE, center = new THREE.Vector3(0, 0, 0)) {
-            // Remove existing grids
-            if (gridHelper) {
-                scene.remove(gridHelper);
-                if (gridHelper.geometry) gridHelper.geometry.dispose();
-                if (gridHelper.material) gridHelper.material.dispose();
-            }
-            if (subGridHelper) {
-                scene.remove(subGridHelper);
-                if (subGridHelper.geometry) subGridHelper.geometry.dispose();
-                if (subGridHelper.material) subGridHelper.material.dispose();
-            }
 
-            // Calculate optimal grid parameters based on camera distance
-            const cameraDistance = camera.position.distanceTo(center);
-            const adaptiveSize = Math.max(size, cameraDistance * 2);
-            
-            // Main grid (coarse)
-            const mainDivisions = Math.max(10, Math.min(50, Math.ceil(adaptiveSize / 10)));
-            gridHelper = new THREE.GridHelper(adaptiveSize, mainDivisions, 0x6b7280, 0x4b5563);
-            
-            // Custom material for better visibility
-            const gridMaterial = new THREE.LineBasicMaterial({
-                color: 0x4b5563,
-                opacity: 0.8,
-                transparent: true,
-                depthWrite: false,
-                depthTest: true
-            });
-            const centerMaterial = new THREE.LineBasicMaterial({
-                color: 0x6b7280,
-                opacity: 0.9,
-                transparent: true,
-                depthWrite: false,
-                depthTest: true
-            });
-            
-            // Apply custom materials
-            gridHelper.material = [centerMaterial, gridMaterial];
-            gridHelper.position.copy(center);
-            gridHelper.position.y = center.y - 0.01; // Slightly below center to avoid z-fighting
-            gridHelper.visible = gridToggleCheckbox.checked;
-            scene.add(gridHelper);
-
-            // Sub grid (fine) - only when camera is close enough
-            if (cameraDistance < adaptiveSize / 2) {
-                const subSize = adaptiveSize / 4;
-                const subDivisions = Math.max(20, Math.ceil(subSize / 2));
-                subGridHelper = new THREE.GridHelper(subSize, subDivisions, 0x374151, 0x374151);
-                
-                const subGridMaterial = new THREE.LineBasicMaterial({
-                    color: 0x374151,
-                    opacity: 0.4,
-                    transparent: true,
-                    depthWrite: false,
-                    depthTest: true
-                });
-                
-                subGridHelper.material = subGridMaterial;
-                subGridHelper.position.copy(center);
-                subGridHelper.position.y = center.y - 0.02; // Even more below to avoid z-fighting
-                subGridHelper.visible = gridToggleCheckbox.checked;
-                scene.add(subGridHelper);
-            }
-        }
 
         function animate() {
             requestAnimationFrame(animate);
@@ -896,7 +833,10 @@
                 camera.near = 0.1;
                 camera.far = 10000;
                 camera.updateProjectionMatrix();
-                createAdaptiveGrid(DEFAULT_GRID_SIZE, new THREE.Vector3(0, 0, 0));
+                // Reset grid to default position
+                if (gridHelper) {
+                    gridHelper.position.set(0, 0, 0);
+                }
                 controls.update();
                 return;
             }
@@ -921,10 +861,23 @@
             camera.far = distance + maxSize * 4;
             camera.updateProjectionMatrix();
 
-            // Create adaptive grid centered on model bounds
-            const gridSize = Math.max(DEFAULT_GRID_SIZE, maxSize * 2);
-            const gridCenter = new THREE.Vector3(center.x, box.min.y, center.z);
-            createAdaptiveGrid(gridSize, gridCenter);
+            // Update grid position and size
+            const newGridSize = Math.max(DEFAULT_GRID_SIZE, Math.ceil(maxSize / 10) * 20);
+            if (gridHelper) {
+                scene.remove(gridHelper);
+                if (gridHelper.geometry) gridHelper.geometry.dispose();
+                if (gridHelper.material) {
+                    if (Array.isArray(gridHelper.material)) {
+                        gridHelper.material.forEach(mat => mat.dispose());
+                    } else {
+                        gridHelper.material.dispose();
+                    }
+                }
+            }
+            gridHelper = new THREE.GridHelper(newGridSize, Math.max(10, Math.ceil(newGridSize / 10)), 0x4b5563, 0x4b5563);
+            gridHelper.visible = gridToggleCheckbox.checked;
+            gridHelper.position.set(center.x, box.min.y, center.z);
+            scene.add(gridHelper);
 
             controls.target.copy(center);
             controls.update();
@@ -1123,7 +1076,9 @@
         exportBtn.addEventListener('click', showExportModal);
         confirmExportBtn.addEventListener('click', exportToGLB);
         cancelExportBtn.addEventListener('click', hideExportModal);
-        gridToggleCheckbox.addEventListener('change', (e) => { if (gridHelper) gridHelper.visible = e.target.checked; });
+        gridToggleCheckbox.addEventListener('change', (e) => { 
+            if (gridHelper) gridHelper.visible = e.target.checked; 
+        });
         transparencyModeSelector.addEventListener('change', (e) => setTransparencyMode(e.target.value));
         resetAppBtn.addEventListener('click', () => { resetModal.classList.remove('hidden'); });
         cancelResetBtn.addEventListener('click', () => { resetModal.classList.add('hidden'); });
