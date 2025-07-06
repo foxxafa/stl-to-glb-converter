@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D STL'den GLB'ye Dönüştürücü (Nihai Sürüm)</title>
+    <title>STL2GBL</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -28,7 +28,57 @@
         body {
             font-family: 'Inter', sans-serif;
             overflow: hidden; /* Prevent body scroll */
+            display: flex;
         }
+        
+        /* Fix for fullscreen sidebar issue */
+        body:fullscreen {
+            display: flex !important;
+        }
+        body:-webkit-full-screen {
+            display: flex !important;
+        }
+        body:-moz-full-screen {
+            display: flex !important;
+        }
+        body:-ms-fullscreen {
+            display: flex !important;
+        }
+        
+        /* Ensure sidebar stays visible in fullscreen */
+        body:fullscreen #sidebar,
+        body:-webkit-full-screen #sidebar,
+        body:-moz-full-screen #sidebar,
+        body:-ms-fullscreen #sidebar {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        
+        /* Responsive sidebar handling */
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            
+            #sidebar {
+                max-width: 100% !important;
+                width: 100% !important;
+                height: auto;
+                max-height: 40vh; /* Adjust height for smaller screens */
+                border-left: none !important;
+                border-top: 1px solid #374151;
+            }
+            
+            #scene-container {
+                height: 60vh !important; /* Adjust height for smaller screens */
+            }
+        }
+        
+        #sidebar {
+            transition: width 0.3s ease;
+        }
+        
         .control-panel {
             height: 100vh;
             overflow-y: auto;
@@ -70,12 +120,24 @@
             border-radius: 50%;
             cursor: pointer;
         }
+        
+        /* Language selector styles */
+        .language-selector {
+            transition: all 0.2s ease;
+        }
+        .language-selector:hover {
+            background-color: #374151;
+        }
+        /* Active language button should not dim on hover */
+        .language-selector.bg-indigo-600:hover {
+            background-color: #4f46e5 !important;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white antialiased flex">
 
     <!-- 3D PREVIEW AREA (MAIN CONTENT) -->
-    <div class="flex-grow h-screen relative">
+    <div class="flex-grow h-screen relative" style="min-width: 0;">
         <div id="scene-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
         <div id="loading-indicator" class="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center rounded-xl hidden z-20">
             <div class="flex flex-col items-center">
@@ -83,71 +145,130 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <p id="loading-text" class="mt-4 text-lg">Model yükleniyor...</p>
+                <p id="loading-text" class="mt-4 text-lg" data-translate="loading">Model yükleniyor...</p>
             </div>
         </div>
         <div id="scene-drop-overlay" class="absolute inset-0 bg-gray-900 bg-opacity-50 border-4 border-dashed border-indigo-500 rounded-xl hidden items-center justify-center z-10 pointer-events-none">
-            <p class="text-2xl font-bold text-white">STL dosyalarını buraya bırakın</p>
+            <p class="text-2xl font-bold text-white" data-translate="dropFiles">STL dosyalarını buraya bırakın</p>
         </div>
     </div>
 
     <!-- CONTROLS PANEL (SIDEBAR) -->
-    <aside class="w-full max-w-sm bg-gray-800 control-panel border-l border-gray-700">
+    <aside id="sidebar" class="w-96 bg-gray-800 control-panel border-l border-gray-700 flex-shrink-0">
         <div class="p-6 space-y-6">
             
+            <!-- Settings -->
             <div class="bg-gray-900 p-4 rounded-xl space-y-4">
-                <h2 class="text-lg font-semibold">1. Sahne Ayarları</h2>
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+                    </svg>
+                    <span data-translate="settings">Ayarlar</span>
+                </h2>
+                
+                <!-- Language Selector -->
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-300" data-translate="language">Dil</span>
+                    <div class="flex bg-gray-700 rounded-lg p-1">
+                        <button id="lang-tr" class="language-selector px-3 py-1 rounded text-sm font-medium bg-indigo-600 text-white">TR</button>
+                        <button id="lang-en" class="language-selector px-3 py-1 rounded text-sm font-medium text-gray-300">EN</button>
+                    </div>
+                </div>
                 <label for="grid-toggle-checkbox" class="flex items-center justify-between cursor-pointer">
-                    <span class="text-sm text-gray-300">Izgarayı Göster</span>
+                    <span class="text-sm text-gray-300" data-translate="showGrid">Izgarayı Göster</span>
                     <div class="relative">
                         <input type="checkbox" id="grid-toggle-checkbox" class="sr-only peer" checked>
                         <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                     </div>
                 </label>
                 <div class="space-y-2">
-                    <label for="transparency-mode" class="text-sm font-medium text-gray-300">Şeffaflık Yöntemi</label>
+                    <label for="transparency-mode" class="text-sm font-medium text-gray-300" data-translate="transparencyMethod">Şeffaflık Yöntemi</label>
                     <select id="transparency-mode" class="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5">
-                        <option value="hash" selected>Stabil (Önerilen)</option>
-                        <option value="blend">Pürüzsüz (Deneysel)</option>
+                        <option value="hash" selected data-translate="stableRecommended">Stabil (Önerilen)</option>
+                        <option value="blend" data-translate="smoothExperimental">Pürüzsüz (Deneysel)</option>
                     </select>
-                    <p class="text-xs text-gray-500">Karmaşık modellerde "Stabil" kullanın. "Pürüzsüz" bazı durumlarda daha iyi görünebilir ama hatalara yol açabilir.</p>
+                    <p class="text-xs text-gray-500" data-translate="transparencyNote">Karmaşık modellerde "Stabil" kullanın. "Pürüzsüz" bazı durumlarda daha iyi görünebilir ama hatalara yol açabilir.</p>
                 </div>
             </div>
 
+            <!-- Model Management -->
             <div class="bg-gray-900 p-4 rounded-xl">
-                <h2 class="text-lg font-semibold mb-3">2. Model Yönetimi</h2>
-                <p class="text-gray-400 text-sm mb-3">STL dosyalarını sahneye sürükleyin veya aşağıdan yönetin.</p>
-                <div id="model-list" class="space-y-3 max-h-80 overflow-y-auto pr-2">
-                    <p id="no-models-message" class="text-gray-500 text-center py-4">Henüz model yüklenmedi.</p>
+                <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 16a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" />
+                        <path d="M13 8a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1zM17 4a1 1 0 011 1v10a1 1 0 11-2 0V5a1 1 0 011-1z" />
+                    </svg>
+                    <span data-translate="modelManagement">Model Yönetimi</span>
+                </h2>
+                <p class="text-gray-400 text-sm mb-3" data-translate="modelManagementDesc">STL dosyalarını sahneye sürükleyin veya aşağıdan yönetin.</p>
+                <div id="model-list-wrapper">
+                    <div id="model-list" class="space-y-3 max-h-80 overflow-y-auto pr-2">
+                        <!-- Model cards will be injected here -->
+                    </div>
+                    <p id="no-models-message" class="text-gray-500 text-center py-4 hidden" data-translate="noModelsLoaded">Henüz model yüklenmedi.</p>
                 </div>
             </div>
 
+            <!-- Export Section -->
             <div class="bg-gray-900 p-4 rounded-xl">
-                <h2 class="text-lg font-semibold mb-3">3. Dönüştür & İndir</h2>
-                <p class="text-gray-400 text-sm mb-3">Görünür modelleri tek bir GLB dosyası olarak dışa aktarın.</p>
-                <button id="export-glb-btn" disabled class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300">
+                <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    <span data-translate="exportDownload">Dışa Aktar</span>
+                </h2>
+                <p class="text-gray-400 text-sm mb-3" data-translate="exportDesc">Görünür modelleri tek bir GLB dosyası olarak dışa aktarın.</p>
+                <button id="export-glb-btn" disabled class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300" data-translate="exportAsGLB">
                     GLB Olarak Dışa Aktar
+                </button>
+            </div>
+
+            <!-- Reset -->
+            <div class="bg-gray-900 p-4 rounded-xl">
+                <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    </svg>
+                    <span data-translate="reset">Sıfırla</span>
+                </h2>
+                <button id="reset-app-btn" class="w-full bg-red-800 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    </svg>
+                    <span data-translate="resetApp">Uygulamayı Sıfırla</span>
                 </button>
             </div>
             
             <div id="error-message" class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg" role="alert">
-                <strong class="font-bold">Hata!</strong>
+                <strong class="font-bold" data-translate="error">Hata!</strong>
                 <span class="block sm:inline" id="error-text"></span>
             </div>
         </div>
     </aside>
 
+    <!-- Reset Confirmation Modal -->
+    <div id="reset-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4 text-center">
+            <h2 class="text-xl font-bold text-yellow-400" data-translate="areYouSure">Emin misiniz?</h2>
+            <p class="text-gray-300" data-translate="resetConfirmation">Bu işlem tüm kayıtlı modelleri ve ayarları kalıcı olarak silecektir. Bu işlem geri alınamaz.</p>
+            <div class="flex justify-center gap-4 pt-4">
+                <button id="cancel-reset-btn" class="px-6 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors" data-translate="cancel">İptal</button>
+                <button id="confirm-reset-btn" class="px-6 py-2 bg-red-700 hover:bg-red-600 rounded-lg font-bold transition-colors" data-translate="yesReset">Evet, Sıfırla</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Export Modal -->
     <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
         <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4">
-            <h2 class="text-xl font-bold">GLB Olarak Dışa Aktar</h2>
-            <p class="text-gray-400">Dışa aktarılacak modelleri seçin.</p>
+            <h2 class="text-xl font-bold" data-translate="exportAsGLB">GLB Olarak Dışa Aktar</h2>
+            <p class="text-gray-400" data-translate="selectModelsToExport">Dışa aktarılacak modelleri seçin.</p>
             <div id="export-model-list" class="space-y-2 max-h-60 overflow-y-auto border border-gray-700 p-3 rounded-lg">
                 <!-- Model items will be injected here -->
             </div>
             <div class="flex justify-end gap-4 pt-4">
-                <button id="cancel-export-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors">İptal</button>
-                <button id="confirm-export-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-bold transition-colors">Seçilenleri Dışa Aktar</button>
+                <button id="cancel-export-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors" data-translate="cancel">İptal</button>
+                <button id="confirm-export-btn" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg font-bold transition-colors" data-translate="exportSelected">Seçilenleri Dışa Aktar</button>
             </div>
         </div>
     </div>
@@ -155,11 +276,11 @@
     <!-- Load Previous State Modal -->
     <div id="load-state-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50">
         <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md space-y-4 text-center">
-            <h2 class="text-xl font-bold">Önceki Oturum Bulundu</h2>
-            <p class="text-gray-400">Kaydedilmiş bir önceki oturumunuz bulundu. Kaldığınız yerden devam etmek ister misiniz?</p>
+            <h2 class="text-xl font-bold" data-translate="previousSessionFound">Önceki Oturum Bulundu</h2>
+            <p class="text-gray-400" data-translate="previousSessionDesc">Kaydedilmiş bir önceki oturumunuz bulundu. Kaldığınız yerden devam etmek ister misiniz?</p>
             <div class="flex justify-center gap-4 pt-4">
-                <button id="deny-load-state-btn" class="px-6 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors">Yeni Başla</button>
-                <button id="confirm-load-state-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-bold transition-colors">Evet, Devam Et</button>
+                <button id="deny-load-state-btn" class="px-6 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition-colors" data-translate="startNew">Yeni Başla</button>
+                <button id="confirm-load-state-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg font-bold transition-colors" data-translate="yesContinue">Evet, Devam Et</button>
             </div>
         </div>
     </div>
@@ -169,6 +290,163 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { STLLoader } from 'three/addons/loaders/STLLoader.js';
         import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+        // --- Language System ---
+        const translations = {
+            tr: {
+                loading: "Model yükleniyor...",
+                dropFiles: "STL dosyalarını buraya bırakın",
+                language: "Dil",
+                settings: "Ayarlar",
+                showGrid: "Izgarayı Göster",
+                transparencyMethod: "Şeffaflık Yöntemi",
+                stableRecommended: "Stabil (Önerilen)",
+                smoothExperimental: "Pürüzsüz (Deneysel)",
+                transparencyNote: "Karmaşık modellerde \"Stabil\" kullanın. \"Pürüzsüz\" bazı durumlarda daha iyi görünebilir ama hatalara yol açabilir.",
+                modelManagement: "Model Yönetimi",
+                modelManagementDesc: "STL dosyalarını sahneye sürükleyin veya aşağıdan yönetin.",
+                noModelsLoaded: "Henüz model yüklenmedi.",
+                exportDownload: "Dışa Aktar",
+                exportDesc: "Görünür modelleri tek bir GLB dosyası olarak dışa aktarın.",
+                exportAsGLB: "GLB Olarak Dışa Aktar",
+                reset: "Sıfırla",
+                resetApp: "Uygulamayı Sıfırla",
+                error: "Hata!",
+                areYouSure: "Emin misiniz?",
+                resetConfirmation: "Bu işlem tüm kayıtlı modelleri ve ayarları kalıcı olarak silecektir. Bu işlem geri alınamaz.",
+                cancel: "İptal",
+                yesReset: "Evet, Sıfırla",
+                selectModelsToExport: "Dışa aktarılacak modelleri seçin.",
+                exportSelected: "Seçilenleri Dışa Aktar",
+                previousSessionFound: "Önceki Oturum Bulundu",
+                previousSessionDesc: "Kaydedilmiş bir önceki oturumunuz bulundu. Kaldığınız yerden devam etmek ister misiniz?",
+                startNew: "Yeni Başla",
+                yesContinue: "Evet, Devam Et",
+                color: "Renk",
+                transparency: "Şeffaflık",
+                modelsLoadedSuccess: "model başarıyla yüklendi.",
+                fileProcessError: "Dosya işlenemedi:",
+                emptyFile: "Dosya boş:",
+                invalidSTL: "Geçersiz STL dosyası:",
+                fileCopyError: "dosyası kopyalanamadı. Uygulama yeniden başlatıldığında bu model kaybolacak.",
+                modelsLoadedError: "Modeller yüklendi ancak arayüz güncellenirken bir hata oluştu.",
+                noModelsToExport: "Dışa aktarılacak model bulunmuyor.",
+                noModelsSelected: "Dışa aktarılacak model seçilmedi.",
+                glbExportError: "GLB dönüştürme sırasında bir hata oluştu.",
+                savedSceneLoading: "Kaydedilen sahne yükleniyor...",
+                modelFileNotFound: "Model dosyası bulunamadı:",
+                modelLoadError: "yüklenemedi:",
+                resetCompleted: "Sıfırlama tamamlandı! Uygulama yeniden başlatılıyor...",
+                cacheCleared: "Önbellek temizlendi. Yeni bir oturum başlatıldı.",
+                successful: "Başarılı!"
+            },
+            en: {
+                loading: "Loading model...",
+                dropFiles: "Drop STL files here",
+                language: "Language",
+                settings: "Settings",
+                showGrid: "Show Grid",
+                transparencyMethod: "Transparency Method",
+                stableRecommended: "Stable (Recommended)",
+                smoothExperimental: "Smooth (Experimental)",
+                transparencyNote: "Use \"Stable\" for complex models. \"Smooth\" may look better in some cases but can cause errors.",
+                modelManagement: "Model Management",
+                modelManagementDesc: "Drag STL files to the scene or manage them below.",
+                noModelsLoaded: "No models loaded yet.",
+                exportDownload: "Export & Download",
+                exportDesc: "Export visible models as a single GLB file.",
+                exportAsGLB: "Export as GLB",
+                reset: "Reset",
+                resetApp: "Reset Application",
+                error: "Error!",
+                areYouSure: "Are you sure?",
+                resetConfirmation: "This action will permanently delete all saved models and settings. This cannot be undone.",
+                cancel: "Cancel",
+                yesReset: "Yes, Reset",
+                selectModelsToExport: "Select models to export.",
+                exportSelected: "Export Selected",
+                previousSessionFound: "Previous Session Found",
+                previousSessionDesc: "A saved previous session was found. Would you like to continue where you left off?",
+                startNew: "Start New",
+                yesContinue: "Yes, Continue",
+                color: "Color",
+                transparency: "Transparency",
+                modelsLoadedSuccess: "models loaded successfully.",
+                fileProcessError: "Failed to process file:",
+                emptyFile: "Empty file:",
+                invalidSTL: "Invalid STL file:",
+                fileCopyError: "file could not be copied. This model will be lost when the application is restarted.",
+                modelsLoadedError: "Models loaded but an error occurred while updating the interface.",
+                noModelsToExport: "No models available to export.",
+                noModelsSelected: "No models selected for export.",
+                glbExportError: "An error occurred while converting to GLB.",
+                savedSceneLoading: "Loading saved scene...",
+                modelFileNotFound: "Model file not found:",
+                modelLoadError: "could not be loaded:",
+                resetCompleted: "Reset completed! Application is restarting...",
+                cacheCleared: "Cache cleared. A new session has started.",
+                successful: "Success!"
+            }
+        };
+
+        let currentLanguage = 'tr';
+
+        function updateLanguage(lang) {
+            currentLanguage = lang;
+            const elements = document.querySelectorAll('[data-translate]');
+            
+            elements.forEach(el => {
+                const key = el.getAttribute('data-translate');
+                if (translations[lang] && translations[lang][key]) {
+                    el.textContent = translations[lang][key];
+                }
+            });
+
+            // Update model card labels manually
+            const modelCards = document.querySelectorAll('.model-card');
+            modelCards.forEach(card => {
+                // Color label is next to color input
+                const colorInput = card.querySelector('input[type="color"]');
+                if (colorInput) {
+                    const colorLabel = colorInput.parentElement.querySelector('label');
+                    if (colorLabel) colorLabel.textContent = getTranslation('color');
+                }
+                
+                // Transparency label is next to opacity value span
+                const opacitySpan = card.querySelector('.opacity-value');
+                if (opacitySpan) {
+                    const transparencyLabel = opacitySpan.parentElement.querySelector('label');
+                    if (transparencyLabel) transparencyLabel.textContent = getTranslation('transparency');
+                }
+            });
+
+            // Update language selector visual state
+            document.getElementById('lang-tr').className = lang === 'tr' 
+                ? 'language-selector px-3 py-1 rounded text-sm font-medium bg-indigo-600 text-white'
+                : 'language-selector px-3 py-1 rounded text-sm font-medium text-gray-300';
+            
+            document.getElementById('lang-en').className = lang === 'en'
+                ? 'language-selector px-3 py-1 rounded text-sm font-medium bg-indigo-600 text-white'
+                : 'language-selector px-3 py-1 rounded text-sm font-medium text-gray-300';
+
+            // Update HTML lang attribute
+            document.documentElement.lang = lang;
+            
+            // Save language preference
+            localStorage.setItem('language', lang);
+        }
+
+        function getTranslation(key) {
+            return translations[currentLanguage][key] || key;
+        }
+
+        // Language selector event listeners
+        document.getElementById('lang-tr').addEventListener('click', () => updateLanguage('tr'));
+        document.getElementById('lang-en').addEventListener('click', () => updateLanguage('en'));
+
+        // Load saved language preference
+        const savedLanguage = localStorage.getItem('language') || 'tr';
+        updateLanguage(savedLanguage);
 
         // --- DOM Element References ---
         const sceneContainer = document.getElementById('scene-container');
@@ -189,6 +467,10 @@
         const loadStateModal = document.getElementById('load-state-modal');
         const confirmLoadStateBtn = document.getElementById('confirm-load-state-btn');
         const denyLoadStateBtn = document.getElementById('deny-load-state-btn');
+        const resetAppBtn = document.getElementById('reset-app-btn');
+        const resetModal = document.getElementById('reset-modal');
+        const cancelResetBtn = document.getElementById('cancel-reset-btn');
+        const confirmResetBtn = document.getElementById('confirm-reset-btn');
 
         // --- Global State ---
         let models = [];
@@ -197,13 +479,13 @@
         const DEFAULT_GRID_SIZE = 100;
 
         // --- Three.js Scene Setup ---
-        let scene, camera, renderer, controls, gridHelper;
+        let scene, camera, renderer, controls, gridHelper, subGridHelper;
 
         function init3D() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x1f2937);
             
-            camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(75, sceneContainer.clientWidth / sceneContainer.clientHeight, 0.1, 10000);
             camera.position.set(20, 20, 20);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -221,10 +503,75 @@
             directionalLight.position.set(5, 10, 7.5);
             scene.add(directionalLight);
             
-            gridHelper = new THREE.GridHelper(DEFAULT_GRID_SIZE, 10, 0x4b5563, 0x4b5563);
-            scene.add(gridHelper);
+            createAdaptiveGrid();
 
             animate();
+        }
+
+        function createAdaptiveGrid(size = DEFAULT_GRID_SIZE, center = new THREE.Vector3(0, 0, 0)) {
+            // Remove existing grids
+            if (gridHelper) {
+                scene.remove(gridHelper);
+                if (gridHelper.geometry) gridHelper.geometry.dispose();
+                if (gridHelper.material) gridHelper.material.dispose();
+            }
+            if (subGridHelper) {
+                scene.remove(subGridHelper);
+                if (subGridHelper.geometry) subGridHelper.geometry.dispose();
+                if (subGridHelper.material) subGridHelper.material.dispose();
+            }
+
+            // Calculate optimal grid parameters based on camera distance
+            const cameraDistance = camera.position.distanceTo(center);
+            const adaptiveSize = Math.max(size, cameraDistance * 2);
+            
+            // Main grid (coarse)
+            const mainDivisions = Math.max(10, Math.min(50, Math.ceil(adaptiveSize / 10)));
+            gridHelper = new THREE.GridHelper(adaptiveSize, mainDivisions, 0x6b7280, 0x4b5563);
+            
+            // Custom material for better visibility
+            const gridMaterial = new THREE.LineBasicMaterial({
+                color: 0x4b5563,
+                opacity: 0.8,
+                transparent: true,
+                depthWrite: false,
+                depthTest: true
+            });
+            const centerMaterial = new THREE.LineBasicMaterial({
+                color: 0x6b7280,
+                opacity: 0.9,
+                transparent: true,
+                depthWrite: false,
+                depthTest: true
+            });
+            
+            // Apply custom materials
+            gridHelper.material = [centerMaterial, gridMaterial];
+            gridHelper.position.copy(center);
+            gridHelper.position.y = center.y - 0.01; // Slightly below center to avoid z-fighting
+            gridHelper.visible = gridToggleCheckbox.checked;
+            scene.add(gridHelper);
+
+            // Sub grid (fine) - only when camera is close enough
+            if (cameraDistance < adaptiveSize / 2) {
+                const subSize = adaptiveSize / 4;
+                const subDivisions = Math.max(20, Math.ceil(subSize / 2));
+                subGridHelper = new THREE.GridHelper(subSize, subDivisions, 0x374151, 0x374151);
+                
+                const subGridMaterial = new THREE.LineBasicMaterial({
+                    color: 0x374151,
+                    opacity: 0.4,
+                    transparent: true,
+                    depthWrite: false,
+                    depthTest: true
+                });
+                
+                subGridHelper.material = subGridMaterial;
+                subGridHelper.position.copy(center);
+                subGridHelper.position.y = center.y - 0.02; // Even more below to avoid z-fighting
+                subGridHelper.visible = gridToggleCheckbox.checked;
+                scene.add(subGridHelper);
+            }
         }
 
         function animate() {
@@ -234,44 +581,100 @@
         }
 
         function onWindowResize() {
-            camera.aspect = sceneContainer.clientWidth / sceneContainer.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(sceneContainer.clientWidth, sceneContainer.clientHeight);
+            // A short timeout prevents issues with rapid resize events
+            setTimeout(() => {
+                if (!renderer || !camera || !sceneContainer) return;
+                
+                // Force the browser to re-calculate the layout.
+                // This is a robust way to fix the "clipped" sidebar issue after fullscreen.
+                document.body.style.display = 'none';
+                document.body.offsetHeight; // This triggers a reflow
+                document.body.style.display = 'flex';
+
+                const width = sceneContainer.clientWidth;
+                const height = sceneContainer.clientHeight;
+                
+                if (width === 0 || height === 0) return;
+
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                
+                renderer.setSize(width, height);
+            }, 50);
         }
         
         async function handleFiles(files) {
-            loadingText.textContent = "Modeller yükleniyor...";
+            loadingText.textContent = getTranslation('loading');
             loadingIndicator.classList.remove('hidden');
+            hideError(); // Clear any previous errors
 
             const filePromises = Array.from(files)
-                .filter(file => file.name.toLowerCase().endsWith('.stl'))
+                .filter(file => {
+                    const isSTL = file.name.toLowerCase().endsWith('.stl');
+                    if (!isSTL) {
+                        console.warn(`Skipping non-STL file: ${file.name}`);
+                    }
+                    return isSTL;
+                })
                 .map(file => new Promise(async (resolve, reject) => {
                     try {
+                        console.log(`Processing file: ${file.name}`);
                         const contents = await file.arrayBuffer();
+                        
+                        // Validate file size
+                        if (contents.byteLength === 0) {
+                            throw new Error(`${getTranslation('emptyFile')} ${file.name}`);
+                        }
+                        
                         const geometry = new STLLoader().parse(contents);
+                        
+                        // Validate geometry
+                        if (!geometry || geometry.attributes.position.count === 0) {
+                            throw new Error(`${getTranslation('invalidSTL')} ${file.name}`);
+                        }
                         
                         let cachedPath = null;
                         if (window.electronAPI) {
                             cachedPath = await window.electronAPI.cacheFileData(file.name, contents);
                             if (!cachedPath) {
                                 console.error(`[Renderer] Failed to cache file ${file.name}`);
-                                showError(`${file.name} dosyası kopyalanamadı. Uygulama yeniden başlatıldığında bu model kaybolacak.`);
+                                showError(`${file.name} ${getTranslation('fileCopyError')}`);
                             }
                         }
                         
                         addModelToScene(geometry, file.name, { filePath: cachedPath });
-                        resolve();
+                        resolve(file.name);
                     } catch (e) {
                         console.error(`Error processing file ${file.name}:`, e);
-                        reject(`Dosya işlenemedi: ${file.name}`);
+                        reject(`${getTranslation('fileProcessError')} ${file.name} - ${e.message}`);
                     }
                 }));
 
-            Promise.all(filePromises)
-                .catch(err => showError(err))
+            Promise.allSettled(filePromises)
+                .then(results => {
+                    const successful = results.filter(r => r.status === 'fulfilled').length;
+                    const failed = results.filter(r => r.status === 'rejected');
+                    
+                    if (successful > 0) {
+                        showSuccess(`${successful} ${getTranslation('modelsLoadedSuccess')}`);
+                        setTimeout(() => hideSuccess(), 3000);
+                    }
+                    
+                    if (failed.length > 0) {
+                        const errors = failed.map(r => r.reason).join('\n');
+                        showError(errors);
+                    }
+                })
                 .finally(() => {
-                    updateModelList(); 
-                    loadingIndicator.classList.add('hidden');
+                    try {
+                        updateModelList(); 
+                    } catch (error) {
+                        console.error("Error during UI update after loading models:", error);
+                        showError(getTranslation('modelsLoadedError'));
+                    } finally {
+                        // This is crucial: always hide the loading indicator.
+                        loadingIndicator.classList.add('hidden');
+                    }
                 });
         }
 
@@ -296,9 +699,9 @@
                 });
                 const mesh = new THREE.Mesh(geometry, material);
                 mesh.visible = modelData.visible;
-                if(options.position) mesh.position.set(options.position.x, options.position.y, options.position.z);
-                if(options.rotation) mesh.rotation.set(options.rotation.x, options.rotation.y, options.rotation.z);
-                if(options.scale) mesh.scale.set(options.scale.x, options.scale.y, options.scale.z);
+                if(options.position) mesh.position.copy(options.position);
+                if(options.rotation) mesh.rotation.set(options.rotation._x, options.rotation._y, options.rotation._z, options.rotation._order);
+                if(options.scale) mesh.scale.copy(options.scale);
 
                 model = { ...modelData, uuid: mesh.uuid, mesh, isBlend: false };
                 scene.add(mesh);
@@ -328,8 +731,9 @@
                     backMesh.position.copy(options.position);
                 }
                 if(options.rotation) {
-                    frontMesh.rotation.copy(options.rotation);
-                    backMesh.rotation.copy(options.rotation);
+                    const newRotation = new THREE.Euler(options.rotation._x, options.rotation._y, options.rotation._z, options.rotation._order);
+                    frontMesh.rotation.copy(newRotation);
+                    backMesh.rotation.copy(newRotation);
                 }
                  if(options.scale) {
                     frontMesh.scale.copy(options.scale);
@@ -348,12 +752,14 @@
         }
 
         function updateModelList() {
-            modelListContainer.innerHTML = '';
+            modelListContainer.innerHTML = ''; // Clear only the list
+            
             if (models.length === 0) {
                 noModelsMessage.classList.remove('hidden');
-                modelListContainer.appendChild(noModelsMessage);
+                modelListContainer.classList.add('hidden');
             } else {
                 noModelsMessage.classList.add('hidden');
+                modelListContainer.classList.remove('hidden');
                 models.forEach(model => {
                     const modelItem = document.createElement('div');
                     modelItem.className = 'model-card p-4 rounded-xl space-y-3';
@@ -370,12 +776,12 @@
                         </div>
                         <div class="space-y-3 pt-3 border-t border-gray-700">
                             <div class="flex items-center justify-between gap-3">
-                                <label class="text-xs text-gray-300 font-medium">Renk</label>
+                                <label class="text-xs text-gray-300 font-medium">${getTranslation('color')}</label>
                                 <input type="color" data-action="change-color" value="${model.color}" class="color-picker shadow-md">
                             </div>
                             <div class="space-y-2">
                                 <div class="flex items-center justify-between">
-                                    <label class="text-xs text-gray-300 font-medium">Şeffaflık</label>
+                                    <label class="text-xs text-gray-300 font-medium">${getTranslation('transparency')}</label>
                                     <span class="opacity-value text-xs text-gray-400">${Math.round(model.opacity * 100)}%</span>
                                 </div>
                                 <input type="range" data-action="change-opacity" min="0" max="1" step="0.01" value="${model.opacity}" class="opacity-slider w-full">
@@ -467,7 +873,11 @@
                 }
                 if(modelToRemove.mesh.material) modelToRemove.mesh.material.dispose();
             }
-            if (modelToRemove.filePath && window.electronAPI) {
+            
+            // --- BUG FIX ---
+            // Only delete the cached file if the model is being permanently removed by the user.
+            if (disposeGeometry && modelToRemove.filePath && window.electronAPI) {
+                console.log(`User deleted model, removing from cache: ${modelToRemove.filePath}`);
                 window.electronAPI.deleteCachedFile(modelToRemove.filePath);
             }
             models = models.filter(m => m.uuid !== modelToRemove.uuid);
@@ -484,10 +894,10 @@
                 controls.target.set(0, 0, 0);
                 camera.position.set(20, 20, 20);
                 camera.near = 0.1;
-                camera.far = 1000;
-                if (gridHelper) gridHelper.position.set(0, 0, 0);
-                controls.update();
+                camera.far = 10000;
                 camera.updateProjectionMatrix();
+                createAdaptiveGrid(DEFAULT_GRID_SIZE, new THREE.Vector3(0, 0, 0));
+                controls.update();
                 return;
             }
 
@@ -507,16 +917,14 @@
             if (direction.lengthSq() === 0) direction.set(0, 0, 1);
             camera.position.copy(direction.multiplyScalar(distance).add(center));
             
-            camera.near = Math.max(0.1, distance - maxSize);
-            camera.far = distance + maxSize;
+            camera.near = Math.max(0.1, distance - maxSize * 2);
+            camera.far = distance + maxSize * 4;
             camera.updateProjectionMatrix();
 
-            const newGridSize = Math.max(DEFAULT_GRID_SIZE, Math.ceil(maxSize / 10) * 20);
-            if (gridHelper) scene.remove(gridHelper);
-            gridHelper = new THREE.GridHelper(newGridSize, 20, 0x4b5563, 0x4b5563);
-            gridHelper.visible = gridToggleCheckbox.checked;
-            gridHelper.position.set(center.x, box.min.y, center.z);
-            scene.add(gridHelper);
+            // Create adaptive grid centered on model bounds
+            const gridSize = Math.max(DEFAULT_GRID_SIZE, maxSize * 2);
+            const gridCenter = new THREE.Vector3(center.x, box.min.y, center.z);
+            createAdaptiveGrid(gridSize, gridCenter);
 
             controls.target.copy(center);
             controls.update();
@@ -524,16 +932,15 @@
 
         function showExportModal() {
             exportModelList.innerHTML = '';
-            const visibleModels = models.filter(m => m.visible);
-            if (visibleModels.length === 0) {
-                showError("Dışa aktarılacak görünür model bulunmuyor.");
+            if (models.length === 0) {
+                showError(getTranslation('noModelsToExport') || "Dışa aktarılacak model bulunmuyor.");
                 return;
             }
-            visibleModels.forEach(model => {
+            models.forEach(model => {
                 const item = document.createElement('label');
                 item.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer';
                 item.innerHTML = `
-                    <input type="checkbox" value="${model.uuid}" checked class="h-4 w-4 rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-600">
+                    <input type="checkbox" value="${model.uuid}" ${model.visible ? 'checked' : ''} class="h-4 w-4 rounded bg-gray-600 border-gray-500 text-indigo-500 focus:ring-indigo-600">
                     <span class="text-sm">${model.name}</span>
                 `;
                 exportModelList.appendChild(item);
@@ -551,7 +958,7 @@
             const modelsToExport = models.filter(m => selectedUuids.includes(m.uuid));
 
             if (modelsToExport.length === 0) {
-                showError("Dışa aktarılacak model seçilmedi.");
+                showError(getTranslation('noModelsSelected'));
                 return;
             }
 
@@ -576,12 +983,12 @@
                 URL.revokeObjectURL(link.href);
                 hideExportModal();
             }, (error) => {
-                showError('GLB dönüştürme sırasında bir hata oluştu.');
+                showError(getTranslation('glbExportError'));
                 console.error('GLTFExporter error:', error);
-            });
+            }, { binary: true });
         }
         
-        function setTransparencyMode(newMode) {
+        function setTransparencyMode(newMode, isLoadingState = false) {
             if (transparencyMode === newMode) return;
             transparencyMode = newMode;
 
@@ -604,16 +1011,38 @@
             currentStates.forEach(state => {
                 addModelToScene(state.geometry, state.name, state);
             });
-
-            updateModelList();
+            
+            // When loading state, the final updateModelList will handle saving.
+            if (!isLoadingState) {
+                updateModelList();
+            }
         }
 
         function showError(message) { errorText.textContent = message; errorMessageDiv.classList.remove('hidden'); }
         function hideError() { errorMessageDiv.classList.add('hidden'); }
         
+        // Success message functions
+        function showSuccess(message) { 
+            // Create success message element if it doesn't exist
+            let successDiv = document.getElementById('success-message');
+            if (!successDiv) {
+                successDiv = document.createElement('div');
+                successDiv.id = 'success-message';
+                successDiv.className = 'hidden bg-green-900 border border-green-700 text-green-200 px-4 py-3 rounded-lg';
+                successDiv.innerHTML = `<strong class="font-bold">${getTranslation('successful')}</strong> <span class="block sm:inline" id="success-text"></span>`;
+                errorMessageDiv.parentNode.insertBefore(successDiv, errorMessageDiv.nextSibling);
+            }
+            document.getElementById('success-text').textContent = message;
+            successDiv.classList.remove('hidden');
+        }
+        function hideSuccess() { 
+            const successDiv = document.getElementById('success-message');
+            if (successDiv) successDiv.classList.add('hidden');
+        }
+
         // --- State Management ---
         function getCurrentState() {
-            return models.map(model => {
+            const modelStates = models.map(model => {
                 const mesh = model.isBlend ? model.frontMesh : model.mesh;
                 return {
                     name: model.name,
@@ -626,6 +1055,10 @@
                     scale: mesh.scale.clone(),
                 };
             });
+            return {
+                models: modelStates,
+                transparencyMode: transparencyMode
+            };
         }
 
         function saveCurrentState() {
@@ -635,14 +1068,23 @@
         }
 
         async function loadState(state) {
-            if (!state || !Array.isArray(state)) return;
+            if (!state || !state.models || !Array.isArray(state.models)) return;
 
-            loadingText.textContent = "Kaydedilen sahne yükleniyor...";
+            // Set transparency mode BEFORE loading models
+            const newMode = state.transparencyMode || 'hash';
+            transparencyModeSelector.value = newMode;
+            setTransparencyMode(newMode, true); // Pass true to skip re-saving state
+
+            loadingText.textContent = getTranslation('savedSceneLoading');
             loadingIndicator.classList.remove('hidden');
+            
+            let loadedCount = 0;
+            let failedCount = 0;
 
-            for (const modelState of state) {
+            for (const modelState of state.models) {
                 if (!modelState.filePath) {
                     console.error(`SKIPPING model ${modelState.name} because filePath is missing.`);
+                    failedCount++;
                     continue;
                 }
                 try {
@@ -650,11 +1092,14 @@
                     if (contents) {
                         const geometry = new STLLoader().parse(contents);
                         addModelToScene(geometry, modelState.name, modelState);
+                        loadedCount++;
                     } else {
-                        showError(`Model dosyası bulunamadı: ${modelState.name}`);
+                        showError(`${getTranslation('modelFileNotFound')} ${modelState.name}`);
+                        failedCount++;
                     }
                 } catch (error) {
-                    showError(`${modelState.name} yüklenemedi: ${error.message}`);
+                    showError(`${modelState.name} ${getTranslation('modelLoadError')} ${error.message}`);
+                    failedCount++;
                 }
             }
             updateModelList();
@@ -663,6 +1108,13 @@
 
         // --- Event Listeners ---
         window.addEventListener('resize', onWindowResize);
+        
+        // Listen for fullscreen changes to trigger a resize, which fixes layout issues.
+        document.addEventListener('fullscreenchange', onWindowResize);
+        document.addEventListener('webkitfullscreenchange', onWindowResize);
+        document.addEventListener('mozfullscreenchange', onWindowResize);
+        document.addEventListener('MSFullscreenChange', onWindowResize);
+
         sceneContainer.addEventListener('dragover', (e) => { e.preventDefault(); sceneDropOverlay.classList.remove('hidden'); });
         sceneContainer.addEventListener('dragleave', (e) => { e.preventDefault(); if (!sceneContainer.contains(e.relatedTarget)) sceneDropOverlay.classList.add('hidden'); });
         sceneContainer.addEventListener('drop', (e) => { e.preventDefault(); sceneDropOverlay.classList.add('hidden'); handleFiles(e.dataTransfer.files); });
@@ -673,35 +1125,61 @@
         cancelExportBtn.addEventListener('click', hideExportModal);
         gridToggleCheckbox.addEventListener('change', (e) => { if (gridHelper) gridHelper.visible = e.target.checked; });
         transparencyModeSelector.addEventListener('change', (e) => setTransparencyMode(e.target.value));
-        
-        // Electron API Listeners for State Management
-        if (window.electronAPI) {
-            confirmLoadStateBtn.addEventListener('click', () => {
-                window.electronAPI.confirmLoadState();
-                loadStateModal.classList.add('hidden');
+        resetAppBtn.addEventListener('click', () => { resetModal.classList.remove('hidden'); });
+        cancelResetBtn.addEventListener('click', () => { resetModal.classList.add('hidden'); });
+        confirmResetBtn.addEventListener('click', () => {
+             console.log("User chose to reset - clearing all cached data");
+             if (window.electronAPI) {
+                window.electronAPI.resetApp();
+             } else {
+                // Fallback for browser environment
+                localStorage.clear();
+                window.location.reload();
+             }
+             resetModal.classList.add('hidden');
+         });
+         
+         // Electron API Listeners for State Management
+         if (window.electronAPI) {
+            window.electronAPI.onResetComplete(() => {
+                console.log('Reset complete, reloading window...');
+                // Add a small delay to ensure user sees the success message before reload
+                showSuccess(getTranslation('resetCompleted'));
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             });
-            denyLoadStateBtn.addEventListener('click', () => {
-                window.electronAPI.denyLoadState();
-                loadStateModal.classList.add('hidden');
-                stateReady = true;
-            });
-            window.electronAPI.onLoadState((state) => {
-                loadState(state).then(() => { stateReady = true; });
-            });
-            window.electronAPI.onAskToLoadState(() => {
-                loadStateModal.classList.remove('hidden');
-            });
-            window.electronAPI.onStateReady(() => {
-                stateReady = true;
-            });
-        } else {
-            console.warn("Electron API not found. State management will be disabled.");
-            stateReady = true; // Enable functionality in browser without saving
-        }
 
-        // --- Initial Call ---
-        init3D();
-        updateModelList();
+             confirmLoadStateBtn.addEventListener('click', () => {
+                 window.electronAPI.confirmLoadState();
+                 loadStateModal.classList.add('hidden');
+             });
+             denyLoadStateBtn.addEventListener('click', () => {
+                 console.log("User chose to start fresh - clearing all cached data");
+                 window.electronAPI.denyLoadState();
+                 loadStateModal.classList.add('hidden');
+                 stateReady = true;
+                 // Show a brief notification that cache was cleared
+                 showSuccess(getTranslation('cacheCleared'));
+                 setTimeout(() => hideSuccess(), 3000);
+             });
+             window.electronAPI.onLoadState((state) => {
+                 loadState(state).then(() => { stateReady = true; });
+             });
+             window.electronAPI.onAskToLoadState(() => {
+                 loadStateModal.classList.remove('hidden');
+             });
+             window.electronAPI.onStateReady(() => {
+                 stateReady = true;
+             });
+         } else {
+             console.warn("Electron API not found. State management will be disabled.");
+             stateReady = true; // Enable functionality in browser without saving
+         }
+
+         // --- Initial Call ---
+         init3D();
+         updateModelList(); // Initial call to set the correct state for the message
     </script>
 </body>
-</ht
+</html>

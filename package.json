@@ -1,5 +1,6 @@
 {
   "name": "stl-to-glb-converter",
+  "productName": "STL2GBL",
   "version": "1.0.0",
   "description": "A 3D STL to GLB converter",
   "main": "main.js",

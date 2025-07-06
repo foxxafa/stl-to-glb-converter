@@ -7,6 +7,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   // Renderer to Main
   saveState: (state) => ipcRenderer.send('save-state', state),
+  resetApp: () => ipcRenderer.send('reset-app'),
   confirmLoadState: () => ipcRenderer.send('confirm-load-state'),
   denyLoadState: () => ipcRenderer.send('deny-load-state'),
   deleteCachedFile: (filePath) => ipcRenderer.send('delete-cached-file', filePath),
@@ -14,12 +15,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Main to Renderer
   onLoadState: (callback) => ipcRenderer.on('load-state', (_event, value) => callback(value)),
   onAskToLoadState: (callback) => ipcRenderer.on('ask-to-load-state', callback),
+  onResetComplete: (callback) => ipcRenderer.on('reset-complete', callback),
   onStateReady: (callback) => ipcRenderer.on('state-ready', callback),
 
   // Renderer to Main (Invoke for response)
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   cacheFile: (sourcePath) => ipcRenderer.invoke('cache-file', sourcePath),
-  cacheFileData: (fileName, arrayBuffer) => ipcRenderer.invoke('cache-file-data', fileName, arrayBuffer)
+  cacheFileData: (fileName, arrayBuffer) => ipcRenderer.invoke('cache-file-data', fileName, arrayBuffer),
+  listCacheFiles: () => ipcRenderer.invoke('list-cache-files')
 });
 
 window.addEventListener('DOMContentLoaded', () => {

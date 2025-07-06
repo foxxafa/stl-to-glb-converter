@@ -12,13 +12,22 @@ console.log(`[Main Process] Cache folder path is: ${cacheFolderPath}`);
 
 // Ensure cache directory exists
 if (!fs.existsSync(cacheFolderPath)) {
-    fs.mkdirSync(cacheFolderPath);
+    fs.mkdirSync(cacheFolderPath, { recursive: true });
+}
+
+// Function to ensure cache directory exists before any operation
+function ensureCacheDirectory() {
+    if (!fs.existsSync(cacheFolderPath)) {
+        console.log('[Main Process] Creating cache directory...');
+        fs.mkdirSync(cacheFolderPath, { recursive: true });
+    }
 }
 
 function saveState(state) {
   try {
+    ensureCacheDirectory(); // Ensure cache dir exists before saving
     console.log('[Main Process] Saving state to file...');
-    console.log('[Main Process] State content being saved:', JSON.stringify(state, null, 2));
+    // The state object now includes models and transparencyMode
     fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2));
     console.log('[Main Process] State saved successfully.');
   } catch (error) {
@@ -31,8 +40,36 @@ function loadState() {
     if (fs.existsSync(stateFilePath)) {
       console.log('[Main Process] Found state file. Reading...');
       const stateData = fs.readFileSync(stateFilePath, 'utf-8');
-      const state = JSON.parse(stateData);
-      console.log('[Main Process] State loaded successfully. Content:', JSON.stringify(state, null, 2));
+      let state = JSON.parse(stateData);
+      
+      // Migration for old state format (array of models)
+      if (Array.isArray(state)) {
+        console.log('[Main Process] Migrating old state format...');
+        state = {
+          models: state,
+          transparencyMode: 'hash' // Default to stable mode
+        };
+      }
+      
+      // Fix old file paths that might have spaces
+      if (state.models) {
+        state.models = state.models.map(item => {
+          if (item.filePath) {
+            const dir = path.dirname(item.filePath);
+            const filename = path.basename(item.filePath);
+            const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+            
+            const sanitizedPath = path.join(dir, sanitizedFilename);
+            if (!fs.existsSync(item.filePath) && fs.existsSync(sanitizedPath)) {
+              console.log(`[Main Process] Fixing path: ${item.filePath} -> ${sanitizedPath}`);
+              item.filePath = sanitizedPath;
+            }
+          }
+          return item;
+        });
+      }
+      
+      console.log('[Main Process] State loaded successfully.');
       return state;
     } else {
       console.log('[Main Process] No state file found.');
@@ -45,21 +82,30 @@ function loadState() {
 
 function deleteStateFile() {
   try {
+    // Attempt to delete the state file, don't fail if it doesn't exist.
     if (fs.existsSync(stateFilePath)) {
       console.log('[Main Process] Deleting state file.');
       fs.unlinkSync(stateFilePath);
-      // Also clear the cache when starting fresh
-      fs.readdirSync(cacheFolderPath).forEach(file => {
+    } else {
+      console.log('[Main Process] No state file to delete.');
+    }
+
+    // Attempt to clear the cache folder.
+    ensureCacheDirectory(); // Make sure the folder exists before trying to read it.
+    if (fs.existsSync(cacheFolderPath)) {
+      console.log('[Main Process] Clearing cache folder...');
+      const files = fs.readdirSync(cacheFolderPath);
+      files.forEach(file => {
           try {
               fs.unlinkSync(path.join(cacheFolderPath, file));
           } catch (err) {
-              console.error(`Failed to delete cached file ${file}:`, err);
+              console.error(`[Main Process] Failed to delete cached file ${file}:`, err);
           }
       });
-      console.log('[Main Process] Cache cleared.');
+      console.log(`[Main Process] Cache cleared. ${files.length} files deleted.`);
     }
   } catch (error) {
-    console.error('[Main Process] Failed to delete state file:', error);
+    console.error('[Main Process] Failed to delete state or cache:', error);
   }
 }
 
@@ -67,6 +113,7 @@ function createWindow () {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: "STL2GBL",
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
@@ -85,7 +132,7 @@ function createWindow () {
   win.webContents.on('did-finish-load', () => {
     const state = loadState();
     // Only ask if a state exists and has models
-    if (state && state.length > 0) {
+    if (state && state.models && state.models.length > 0) {
       console.log('[Main Process] State file has data. Asking renderer to show load prompt.');
       win.webContents.send('ask-to-load-state');
     } else {
@@ -123,14 +170,18 @@ app.whenReady().then(() => {
   ipcMain.handle('cache-file-data', (event, fileName, arrayBuffer) => {
       console.log(`[Main Process] cache-file-data request received for: ${fileName}`);
       try {
-          const uniqueId = `${Date.now()}-${fileName}`;
+          ensureCacheDirectory(); // Ensure cache directory exists
+          
+          // Sanitize filename - remove/replace problematic characters
+          const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const uniqueId = `${Date.now()}-${sanitizedFileName}`;
           const cachedPath = path.join(cacheFolderPath, uniqueId);
           
           // Convert ArrayBuffer to Buffer and write to file
           const buffer = Buffer.from(arrayBuffer);
           fs.writeFileSync(cachedPath, buffer);
           
-          console.log(`[Main Process] Successfully cached file data for ${fileName} to ${cachedPath}`);
+          console.log(`[Main Process] Successfully cached file data for ${fileName} (as ${sanitizedFileName}) to ${cachedPath}`);
           return cachedPath;
       } catch (error) {
           console.error(`[Main Process] Failed to cache file data for ${fileName}:`, error);
@@ -146,6 +197,18 @@ app.whenReady().then(() => {
           } catch (error) {
               console.error(`[Main Process] Failed to delete cached file ${filePath}:`, error);
           }
+      }
+  });
+
+  ipcMain.handle('list-cache-files', (event) => {
+      try {
+          ensureCacheDirectory();
+          const files = fs.readdirSync(cacheFolderPath);
+          console.log(`[Main Process] Cache files: ${files.join(', ')}`);
+          return files;
+      } catch (error) {
+          console.error('[Main Process] Failed to list cache files:', error);
+          return [];
       }
   });
 
@@ -171,6 +234,14 @@ app.whenReady().then(() => {
   ipcMain.on('deny-load-state', (event) => {
     console.log('[Main Process] User denied loading previous state. Deleting old state file.');
     deleteStateFile();
+    // Also tell renderer it's ready to start fresh, otherwise it might wait.
+    event.sender.send('state-ready');
+  });
+
+  ipcMain.on('reset-app', (event) => {
+    console.log('[Main Process] User requested to reset the application.');
+    deleteStateFile();
+    event.sender.send('reset-complete');
   });
 
   createWindow();
