@@ -511,9 +511,43 @@
 
 
 
+        let lastCameraUpdate = 0;
+        let lastCameraPosition = new THREE.Vector3();
+        let currentGridSize = DEFAULT_GRID_SIZE;
+
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
+            
+            // Update grid when camera moves significantly (throttled for stability)
+            const now = Date.now();
+            if (now - lastCameraUpdate > 2500) { // Check every 2.5 seconds (less frequent)
+                const currentPos = camera.position.clone();
+                const distance = lastCameraPosition.distanceTo(currentPos);
+                
+                if (distance > 25) { // Moved more than 25 units (higher threshold)
+                    if (models.length > 0) {
+                        // Update grid based on current scene
+                        const visibleModels = models.filter(m => m.visible);
+                        if (visibleModels.length > 0) {
+                            const box = new THREE.Box3();
+                            visibleModels.forEach(modelData => {
+                                box.expandByObject(modelData.isBlend ? modelData.frontMesh : modelData.mesh);
+                            });
+                            const size = box.getSize(new THREE.Vector3());
+                            const center = box.getCenter(new THREE.Vector3());
+                            const horizontalSize = Math.max(size.x, size.z); // Sadece yatay boyutlar
+                            updateGrid(center, horizontalSize, box.min.y, false); // Don't force update
+                        }
+                    } else {
+                        // Update grid for empty scene
+                        updateGrid(new THREE.Vector3(0, 0, 0), 10, null, false);
+                    }
+                    lastCameraPosition.copy(currentPos);
+                    lastCameraUpdate = now;
+                }
+            }
+            
             renderer.render(scene, camera);
         }
 
@@ -824,6 +858,56 @@
             exportBtn.disabled = !models.some(m => m.visible);
         }
 
+        function updateGrid(center, horizontalSize, minY = null, forceUpdate = false) {
+            const cameraDistance = camera.position.distanceTo(center);
+            
+            // Grid size is always 2.5x model horizontal size, regardless of camera distance
+            let newGridSize = Math.max(horizontalSize * 2.5, DEFAULT_GRID_SIZE);
+            
+            // Don't update grid size unless there's a significant change
+            const sizeChangeTreshold = currentGridSize * 0.3; // 30% threshold
+            if (!forceUpdate && Math.abs(newGridSize - currentGridSize) < sizeChangeTreshold) {
+                newGridSize = currentGridSize; // Keep current size
+            } else {
+                currentGridSize = newGridSize; // Update stored size
+            }
+            
+            // Division count based on camera distance and grid size
+            let divisions;
+            
+            if (cameraDistance < 50) {
+                divisions = Math.max(15, Math.min(30, Math.ceil(newGridSize / 8)));
+            } else if (cameraDistance < 200) {
+                divisions = Math.max(10, Math.min(25, Math.ceil(newGridSize / 12)));
+            } else {
+                divisions = Math.max(8, Math.min(20, Math.ceil(newGridSize / 18)));
+            }
+            
+            if (gridHelper) {
+                scene.remove(gridHelper);
+                if (gridHelper.geometry) gridHelper.geometry.dispose();
+                if (gridHelper.material) {
+                    if (Array.isArray(gridHelper.material)) {
+                        gridHelper.material.forEach(mat => mat.dispose());
+                    } else {
+                        gridHelper.material.dispose();
+                    }
+                }
+            }
+            
+            // Use different colors based on distance for better visibility
+            const centerLineColor = cameraDistance > 100 ? 0x9ca3af : 0x6b7280;
+            const gridLineColor = cameraDistance > 100 ? 0x6b7280 : 0x4b5563;
+            
+            gridHelper = new THREE.GridHelper(newGridSize, divisions, centerLineColor, gridLineColor);
+            gridHelper.visible = gridToggleCheckbox.checked;
+            
+            // Position grid at the bottom of the model (or slightly below)
+            const gridY = minY !== null ? minY - 0.1 : 0;
+            gridHelper.position.set(center.x, gridY, center.z);
+            scene.add(gridHelper);
+        }
+
         function updateSceneAndCamera() {
             const visibleModels = models.filter(m => m.visible);
             
@@ -849,6 +933,7 @@
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             const maxSize = Math.max(size.x, size.y, size.z);
+            const horizontalSize = Math.max(size.x, size.z); // Grid için sadece yatay boyutlar
             
             const fitOffset = 1.5;
             const distance = (maxSize / 2) / Math.tan((camera.fov * Math.PI / 180) / 2) * fitOffset;
@@ -861,23 +946,7 @@
             camera.far = distance + maxSize * 4;
             camera.updateProjectionMatrix();
 
-            // Update grid position and size
-            const newGridSize = Math.max(DEFAULT_GRID_SIZE, Math.ceil(maxSize / 10) * 20);
-            if (gridHelper) {
-                scene.remove(gridHelper);
-                if (gridHelper.geometry) gridHelper.geometry.dispose();
-                if (gridHelper.material) {
-                    if (Array.isArray(gridHelper.material)) {
-                        gridHelper.material.forEach(mat => mat.dispose());
-                    } else {
-                        gridHelper.material.dispose();
-                    }
-                }
-            }
-            gridHelper = new THREE.GridHelper(newGridSize, Math.max(10, Math.ceil(newGridSize / 10)), 0x4b5563, 0x4b5563);
-            gridHelper.visible = gridToggleCheckbox.checked;
-            gridHelper.position.set(center.x, box.min.y, center.z);
-            scene.add(gridHelper);
+            updateGrid(center, horizontalSize, box.min.y, true); // Force update when scene changes
 
             controls.target.copy(center);
             controls.update();
