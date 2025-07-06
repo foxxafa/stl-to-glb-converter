@@ -18,6 +18,9 @@
   "build": {
     "appId": "com.example.stl-to-glb-converter",
     "productName": "STL to GLB Converter",
+    "directories": {
+      "output": "build"
+    },
     "files": [
       "index.html",
       "main.js",
