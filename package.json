@@ -1,6 +1,6 @@
 {
   "name": "stl-to-glb-converter",
-  "productName": "STL2GBL",
+  "productName": "STL2GLB",
   "version": "1.0.0",
   "description": "A 3D STL to GLB converter",
   "main": "main.js",
@@ -17,17 +17,20 @@
   },
   "build": {
     "appId": "com.example.stl-to-glb-converter",
-    "productName": "STL to GLB Converter",
+    "productName": "STL2GLB",
     "directories": {
       "output": "build"
     },
     "files": [
       "index.html",
       "main.js",
-      "preload.js"
+      "preload.js",
+      "GLBICON.png"
     ],
     "win": {
-      "target": "portable"
-    }
+      "target": "portable",
+      "icon": "GLBICON.png"
+    },
+    "icon": "GLBICON.png"
   }
 }

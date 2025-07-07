@@ -113,7 +113,8 @@ function createWindow () {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
-    title: "STL2GBL",
+    title: "STL2GLB",
+    icon: path.join(__dirname, 'GLBICON.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: false,
