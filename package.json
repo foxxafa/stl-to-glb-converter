@@ -2,22 +2,27 @@
   "name": "stl-to-glb-converter",
   "productName": "STL2GLB",
   "version": "1.0.0",
-  "description": "A 3D STL to GLB converter",
+  "description": "A professional 3D STL to GLB file converter application",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win --publish=never",
+    "build": "electron-builder --win --publish=never"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["3D", "STL", "GLB", "converter", "3D-models"],
+  "author": {
+    "name": "STL2GLB Team",
+    "email": "support@stl2glb.com"
+  },
+  "license": "MIT",
   "devDependencies": {
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "com.example.stl-to-glb-converter",
+    "appId": "com.stl2glb.converter",
     "productName": "STL2GLB",
+    "copyright": "Copyright © 2024 STL2GLB",
     "directories": {
       "output": "build"
     },
@@ -25,12 +30,35 @@
       "index.html",
       "main.js",
       "preload.js",
-      "GLBICON.png"
+      "GLBICON.png",
+      "GLBICON.ico",
+      "libs/"
     ],
-    "win": {
-      "target": "portable",
-      "icon": "GLBICON.png"
+    "extraMetadata": {
+      "name": "stl2glb",
+      "productName": "STL2GLB"
     },
-    "icon": "GLBICON.png"
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "GLBICON.ico",
+      "verifyUpdateCodeSignature": false,
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "GLBICON.ico",
+      "uninstallerIcon": "GLBICON.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "STL2GLB"
+    },
+    "icon": "GLBICON.ico"
   }
 }

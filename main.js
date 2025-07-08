@@ -2,6 +2,15 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// Set application security policies to avoid false positives
+app.commandLine.appendSwitch('no-sandbox');
+app.commandLine.appendSwitch('disable-dev-shm-usage');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
+// Application metadata for better Windows compatibility
+app.setName('STL2GLB');
+app.setAppUserModelId('com.stl2glb.converter');
+
 // --- State Management ---
 const userDataPath = app.getPath('userData');
 const stateFilePath = path.join(userDataPath, 'state.json');
@@ -114,19 +123,20 @@ function createWindow () {
     width: 1200,
     height: 800,
     title: "STL2GLB",
-    icon: path.join(__dirname, 'GLBICON.png'),
+    icon: path.join(__dirname, 'GLBICON.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false,
-      allowRunningInsecureContent: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       contextIsolation: true,
-      enableRemoteModule: false
+      enableRemoteModule: false,
+      nodeIntegration: false
     }
   });
 
   win.loadFile('index.html');
 
-  // Automatically open DevTools for debugging has been removed for now.
+  // DevTools for debugging
   // win.webContents.openDevTools();
 
   // Ask renderer to load state if it exists

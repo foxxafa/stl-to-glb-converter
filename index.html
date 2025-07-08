@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <title>STL2GLB</title>
     <link rel="icon" type="image/png" href="GLBICON.png">
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS (Offline) -->
+    <script src="libs/tailwind.min.js"></script>
     
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Three.js -->
-    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <!-- Three.js (Offline) -->
+    <script src="libs/es-module-shims.js"></script>
     <script type="importmap">
     {
         "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+            "three": "./libs/three.module.js",
+            "three/addons/controls/OrbitControls.js": "./libs/three-addons/OrbitControls.js",
+            "three/addons/loaders/STLLoader.js": "./libs/three-addons/STLLoader.js", 
+            "three/addons/exporters/GLTFExporter.js": "./libs/three-addons/GLTFExporter.js",
+            "./../utils/TextureUtils.js": "./libs/utils/TextureUtils.js"
         }
     }
     </script>
 
     <style>
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
             overflow: hidden; /* Prevent body scroll */
             display: flex;
         }
